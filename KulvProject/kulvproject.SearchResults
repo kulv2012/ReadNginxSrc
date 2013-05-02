@@ -1,0 +1,30 @@
+---- output_filter Matches (34 in 18 files) ----
+Ngx_buf.h (src\core):    ngx_output_chain_filter_pt   output_filter;//为ngx_chain_writer , ngx_http_output_filter ,ngx_http_next_filter
+Ngx_event_pipe.c (src\event):                rc = p->output_filter(p->output_ctx, p->out);
+Ngx_event_pipe.c (src\event):                rc = p->output_filter(p->output_ctx, p->in);
+Ngx_event_pipe.c (src\event):        rc = p->output_filter(p->output_ctx, out);
+Ngx_event_pipe.h (src\event):typedef ngx_int_t (*ngx_event_pipe_output_filter_pt)(void *data,
+Ngx_event_pipe.h (src\event):    ngx_event_pipe_output_filter_pt   output_filter;
+Ngx_http_autoindex_module.c (src\http\modules):    return ngx_http_output_filter(r, &out);
+Ngx_http_copy_filter_module.c (src\http):        ctx->output_filter = (ngx_output_chain_filter_pt) ngx_http_next_filter;
+Ngx_http_core_module.c (src\http):    return ngx_http_output_filter(r, &out);
+Ngx_http_core_module.c (src\http):ngx_http_output_filter(ngx_http_request_t *r, ngx_chain_t *in)
+Ngx_http_core_module.h (src\http):ngx_int_t ngx_http_output_filter(ngx_http_request_t *r, ngx_chain_t *chain);
+Ngx_http_file_cache.c (src\http):    return ngx_http_output_filter(r, &out);
+Ngx_http_flv_module.c (src\http\modules):    return ngx_http_output_filter(r, &out[i]);
+Ngx_http_gzip_static_module.c (src\http\modules):    return ngx_http_output_filter(r, &out);
+Ngx_http_request.c (src\http):    rc = ngx_http_output_filter(r, NULL);
+Ngx_http_request.c (src\http):    return ngx_http_output_filter(r, &out);//刷一个空的缓冲区给客户端，实际上就是要手动刷一下，促使数据发送给客户端。
+Ngx_http_special_response.c (src\http):    return ngx_http_output_filter(r, &out[0]);
+Ngx_http_special_response.c (src\http):    return ngx_http_output_filter(r, &out);
+Ngx_http_ssi_filter_module.c (src\http\modules):    return ngx_http_output_filter(r, out);
+Ngx_http_static_module.c (src\http\modules):    return ngx_http_output_filter(r, &out);
+Ngx_http_stub_status_module.c (src\http\modules):    return ngx_http_output_filter(r, &out);
+Ngx_http_upstream.c (src\http):    u->output.output_filter = ngx_chain_writer;//设置过滤模块的开始过滤函数为writer。，也就是output_filter
+Ngx_http_upstream.c (src\http):    p->output_filter = (ngx_event_pipe_output_filter_pt) ngx_http_output_filter;//设置filter，可以看到就是http的输出filter
+Ngx_http_upstream.c (src\http):                rc = ngx_http_output_filter(r, u->out_bufs);//一个个调用过滤模块，最终发送数据。
+Ngx_http_upstream.h (src\http):    ngx_output_chain_ctx_t           output;//输出数据的结构，里面存有要发送的数据，以及发送的output_filter指针
+Ngx_output_chain.c (src\core):        if (in == NULL) {//如果要发送的数据为空，也就是啥也不用发送。那就直接调用output_filter的了。
+Ngx_output_chain.c (src\core):            return ctx->output_filter(ctx->filter_ctx, in);
+Ngx_output_chain.c (src\core):            return ctx->output_filter(ctx->filter_ctx, in);
+Ngx_output_chain.c (src\core):        last = ctx->output_filter(ctx->filter_ctx, out);
