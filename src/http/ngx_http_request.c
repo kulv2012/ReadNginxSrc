@@ -625,7 +625,8 @@ ngx_http_ssl_servername(ngx_ssl_conn_t *ssl_conn, int *ad, void *arg)
 
 static void
 ngx_http_process_request_line(ngx_event_t *rev)
-{//ngx_event_t的data记录所属的连接connection_t，连接里面目前指向http_request_t
+{//读取客户端发送的第一行数据，也就是GET /UII HTTP 1.1 , 读取完毕后，会调用ngx_http_process_request_headers读取头部数据
+//ngx_event_t的data记录所属的连接connection_t，连接里面目前指向http_request_t
     u_char                    *host;
     ssize_t                    n;
     ngx_int_t                  rc, rv;
@@ -750,7 +751,7 @@ ngx_http_process_request_line(ngx_event_t *rev)
             }
             c->log->action = "reading client request headers";
             rev->handler = ngx_http_process_request_headers;
-            ngx_http_process_request_headers(rev);
+            ngx_http_process_request_headers(rev);//下面去读取请求的头部数据，第一行的GET在此读取成功。下面读取头部数据了。
 
             return;
         }
@@ -783,7 +784,8 @@ ngx_http_process_request_line(ngx_event_t *rev)
 
 static void
 ngx_http_process_request_headers(ngx_event_t *rev)
-{
+{//ngx_http_process_request_line调用这里，此时已经读取完了请求的第一行GET /uri http 1.0.
+//下面开始循环读取请求的头部headers数据
     u_char                     *p;
     size_t                      len;
     ssize_t                     n;
@@ -818,7 +820,7 @@ ngx_http_process_request_headers(ngx_event_t *rev)
                     ngx_http_close_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
                     return;
                 }
-                if (rv == NGX_DECLINED) {
+                if (rv == NGX_DECLINED) {//头部数据大小超过配额了，拒绝
                     p = r->header_name_start;
                     if (p == NULL) {
                         ngx_log_error(NGX_LOG_INFO, c->log, 0,  "client sent too large request");
@@ -835,15 +837,15 @@ ngx_http_process_request_headers(ngx_event_t *rev)
                     return;
                 }
             }
-			//尝试去读一点数据出来
-            n = ngx_http_read_request_header(r);
+			
+            n = ngx_http_read_request_header(r);//尝试去读一点数据出来，这个函数负责读取get行和header数据。
             if (n == NGX_AGAIN || n == NGX_ERROR) {
                 return;//如果没有读数据了，或者失败了。都会设置相应的错误码的
             }
         }
-		//有数据放在header_in了，下面进行处理解析，每次只解析一行。
+		//有数据放在header_in了，下面进行处理解析header行，每次只解析一行。GET/POST行已经在ngx_http_parse_request_line进行处理了。
         rc = ngx_http_parse_header_line(r, r->header_in, cscf->underscores_in_headers);
-        if (rc == NGX_OK) {//解析出了一行。
+        if (rc == NGX_OK) {//解析出了一行。下面需要将这个HEADER放入哈希表中，然后调用对应的ngx_http_headers_in里面的回调。
             if (r->invalid_header && cscf->ignore_invalid_headers) {
                 /* there was error while a header line parsing */
                 ngx_log_error(NGX_LOG_INFO, c->log, 0, "client sent invalid header line: \"%*s\"", r->header_end - r->header_name_start, r->header_name_start);
@@ -903,10 +905,8 @@ ngx_http_process_request_headers(ngx_event_t *rev)
             continue;
         }
         /* rc == NGX_HTTP_PARSE_INVALID_HEADER: "\r" is not followed by "\n" */
-        ngx_log_error(NGX_LOG_INFO, c->log, 0,
-                      "client sent invalid header line: \"%*s\\r...\"",
-                      r->header_end - r->header_name_start,
-                      r->header_name_start);
+        ngx_log_error(NGX_LOG_INFO, c->log, 0,  "client sent invalid header line: \"%*s\\r...\"",
+                      r->header_end - r->header_name_start, r->header_name_start);
         ngx_http_finalize_request(r, NGX_HTTP_BAD_REQUEST);
         return;
     }
@@ -916,6 +916,7 @@ ngx_http_process_request_headers(ngx_event_t *rev)
 static ssize_t
 ngx_http_read_request_header(ngx_http_request_t *r)
 {//看看有没有数据在header_in的缓冲区，如果有，则返回大小，否则读一些，返回大小
+//读取第一行GET、POST的时候会调用这里获取数据，读取header的时候也会调用这里。
     ssize_t                    n;
     ngx_event_t               *rev;
     ngx_connection_t          *c;
@@ -1228,7 +1229,8 @@ ngx_http_process_cookie(ngx_http_request_t *r, ngx_table_elt_t *h,
 
 static ngx_int_t
 ngx_http_process_request_header(ngx_http_request_t *r)
-{//对HEADER头部域进行简单处理，解析虚拟主机，请求长度等。
+{//ngx_http_process_request_headers调用这里，读取完毕了所有的头部数据，已经碰到了\n\r。
+//对HEADER头部域进行简单处理，解析虚拟主机，请求长度等。调用这里之后，会调用ngx_http_process_request进行请求的处理。
     if (ngx_http_find_virtual_server(r, r->headers_in.server.data, r->headers_in.server.len) == NGX_ERROR) {
         ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
         return NGX_ERROR;
@@ -1326,7 +1328,7 @@ ngx_http_process_request(ngx_http_request_t *r)
 #endif
     c->read->handler = ngx_http_request_handler;//设置这个连接的读事件结构。有可读事件就调动这个函数
     c->write->handler = ngx_http_request_handler;
-    r->read_event_handler = ngx_http_block_reading;
+    r->read_event_handler = ngx_http_block_reading;//
 
     ngx_http_handler(r);//准备长袍
     ngx_http_run_posted_requests(c);//ngx_http_run_posted_requests函数是处理子请求的。是么
@@ -1927,13 +1929,9 @@ ngx_http_request_finalizer(ngx_http_request_t *r)
 void
 ngx_http_block_reading(ngx_http_request_t *r)
 {
-    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "http reading blocked");
-
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "http reading blocked");
     /* aio does not call this handler */
-
-    if ((ngx_event_flags & NGX_USE_LEVEL_EVENT)
-        && r->connection->read->active)
+    if ((ngx_event_flags & NGX_USE_LEVEL_EVENT)  && r->connection->read->active)
     {
         if (ngx_del_event(r->connection->read, NGX_READ_EVENT, 0) != NGX_OK) {
             ngx_http_close_request(r, 0);

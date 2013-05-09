@@ -91,13 +91,14 @@ ngx_output_chain(ngx_output_chain_ctx_t *ctx, ngx_chain_t *in)//ctxÎª&u->output£
                 continue;
             }
             if (ngx_output_chain_as_is(ctx, ctx->in->buf)) { /* move the chain link to the output chain */
-                cl = ctx->in;
+                cl = ctx->in;//buf²»ÐèÒª¿½±´£¬¸Ä±äÒ»ÏÂÖ¸Ïò¾ÍÐÐÁË¡£
                 ctx->in = cl->next;
                 *last_out = cl;//³õÊ¼»¯Ê±£¬last_out = &out;ÕâÀï½«clÕâ¸öÍ·²¿µÄ½ÚµãÓÃoutÖ¸Ïò¡£outÖ¸ÏòÕâÖÖ´¦Àí¹ýµÄ½ÚµãÍ·²¿¡£
                 last_out = &cl->next;//last_outÖ¸ÏòÏÂÒ»¸ö½Úµã¡£ÏÂÃæ¼ÌÐø¡£
-                cl->next = NULL;//½Ø¶ÏÕâ¸ö¼¸µãÓëºóÃæ»¹Î´´¦ÀíµÄ½Úµã£¬È»ºó¼ÌÐø¡£
+                cl->next = NULL;//½Ø¶ÏÕâ¸ö¼¸µãÓëºóÃæ»¹Î´´¦ÀíµÄ½Úµã£¬È»ºó¼ÌÐø¡£ÏÂ´ÎÑ­»·»á¼ÌÐøÍùºóÌí¼ÓµÄ¡£
                 continue;
             }
+			//ºóÃæµÄÊÇÐèÒªÊµ¼Ê¿½±´ÄÚ´æµÄ¡£
             if (ctx->buf == NULL) {
                 rc = ngx_output_chain_align_file_buf(ctx, bsize);
                 if (rc == NGX_ERROR) {
@@ -116,8 +117,7 @@ ngx_output_chain(ngx_output_chain_ctx_t *ctx, ngx_chain_t *in)//ctxÎª&u->output£
                     }
                 }
             }
-            rc = ngx_output_chain_copy_buf(ctx);//½«ctx->in->bufµÄ»º³å¿½±´µ½ctx->bufÉÏÃæÈ¥¡£
-
+            rc = ngx_output_chain_copy_buf(ctx);//½«ctx->in->bufµÄ»º³å¿½±´µ½ctx->bufÉÏÃæÈ¥¡£»á´´½¨Ò»¸öÐÂµÄ½Úµã¡£
             if (rc == NGX_ERROR) {
                 return rc;
             }
@@ -149,7 +149,7 @@ ngx_output_chain(ngx_output_chain_ctx_t *ctx, ngx_chain_t *in)//ctxÎª&u->output£
             }
             return last;
         }
-		//outÎª¸Õ¸Õ´¦Àí£¬¿½±´¹ýµÄ»º³åÇø£¬ÏÂÃæ½øÐÐ·¢ËÍÁË°ÉÓ¦¸Ã¡£µ÷ÓÃµÄÊÇngx_chain_writer
+		//outÎª¸Õ¸Õ´¦Àí£¬¿½±´¹ýµÄ»º³åÇøÁ´±íÍ·²¿£¬ÏÂÃæ½øÐÐ·¢ËÍÁË°ÉÓ¦¸Ã¡£µ÷ÓÃµÄÊÇngx_chain_writer
         last = ctx->output_filter(ctx->filter_ctx, out);
         if (last == NGX_ERROR || last == NGX_DONE) {
             return last;
@@ -162,14 +162,15 @@ ngx_output_chain(ngx_output_chain_ctx_t *ctx, ngx_chain_t *in)//ctxÎª&u->output£
 
 static ngx_inline ngx_int_t
 ngx_output_chain_as_is(ngx_output_chain_ctx_t *ctx, ngx_buf_t *buf)
-{//¿´¿´Õâ¸ö½ÚµãÊÇ·ñ¿ÉÒÔ¿½±´¡£
+{//¿´¿´Õâ¸ö½ÚµãÊÇ·ñ¿ÉÒÔ¿½±´¡£¼ì²âÊÇ·ñcontentÊÇ·ñÔÚÎÄ¼þÖÐ¡£ÅÐ¶ÏÊÇ·ñÐèÒª¸´ÖÆbuf.
+//·µ»Ø1±íÊ¾ÉÏ²ã²»ÐèÒª¿½±´buf,·ñÔòÐèÒªÖØÐÂallocÒ»¸ö½Úµã£¬¿½±´Êµ¼ÊÄÚ´æµ½ÁíÍâÒ»¸ö½Úµã¡£
     ngx_uint_t  sendfile;
 
-    if (ngx_buf_special(buf)) {
+    if (ngx_buf_special(buf)) {//²»ÔÙÎÄ¼þÖÐ¡£
         return 1;
     }
     if (buf->in_file && buf->file->directio) {
-        return 0;
+        return 0;//Èç¹ûbufÔÚÎÄ¼þÖÐ£¬Ê¹ÓÃÁËdirectio£¬ÐèÒª¿½±´buf
     }
     sendfile = ctx->sendfile;
 #if (NGX_SENDFILE_LIMIT)
@@ -201,7 +202,7 @@ static ngx_int_t ngx_output_chain_add_copy(ngx_pool_t *pool, ngx_chain_t **chain
     ngx_buf_t    *b, *buf;
 #endif
 
-    ll = chain;//llÖ¸ÏòÁ´±íÍ·²¿¡£
+    ll = chain;//llÖ¸ÏòÁ´±íÍ·²¿¡£chainÀïÃæ¿ÉÄÜÓÐÊý¾Ý£¬ËùÒÔÐèÒª×·¼Óµ½Ä©Î²
     for (cl = *chain; cl; cl = cl->next) {
         ll = &cl->next;//Ò»Ö±ÕÒµ½Õâ¸ö»º³åÁ´±íµÄ×îºóÃæ¡£
     }
@@ -370,7 +371,7 @@ ngx_output_chain_get_buf(ngx_output_chain_ctx_t *ctx, off_t bsize)
 
 static ngx_int_t
 ngx_output_chain_copy_buf(ngx_output_chain_ctx_t *ctx)
-{
+{//½«ctx->in->bufµÄ»º³å¿½±´µ½ctx->bufÉÏÃæÈ¥¡£
     off_t        size;
     ssize_t      n;
     ngx_buf_t   *src, *dst;
@@ -380,24 +381,20 @@ ngx_output_chain_copy_buf(ngx_output_chain_ctx_t *ctx)
     dst = ctx->buf;
     size = ngx_buf_size(src);
     size = ngx_min(size, dst->end - dst->pos);
-
     sendfile = ctx->sendfile & !ctx->directio;
 
 #if (NGX_SENDFILE_LIMIT)
-
     if (src->in_file && src->file_pos >= NGX_SENDFILE_LIMIT) {
         sendfile = 0;
     }
-
 #endif
 
-    if (ngx_buf_in_memory(src)) {
+    if (ngx_buf_in_memory(src)) {//Èç¹ûÊý¾ÝÔÚÄÚ´æÀï£¬Ö±½Ó½øÐÐ¿½±´¾ÍÐÐ¡£Ïàµ±ÓÚb->temporary || b->memory || b->mmap
         ngx_memcpy(dst->pos, src->pos, (size_t) size);
         src->pos += (size_t) size;
         dst->last += (size_t) size;
 
         if (src->in_file) {
-
             if (sendfile) {
                 dst->in_file = 1;
                 dst->file = src->file;
@@ -420,73 +417,52 @@ ngx_output_chain_copy_buf(ngx_output_chain_ctx_t *ctx)
             dst->last_in_chain = src->last_in_chain;
         }
 
-    } else {
+    } else {//·ñÔò£¬ÎÄ¼þ²»ÔÙÄÚ´æÀïÃæ£¬ÐèÒª´Ó´ÅÅÌ¶ÁÈ¡¡£
 
 #if (NGX_HAVE_ALIGNED_DIRECTIO)
-
         if (ctx->unaligned) {
             if (ngx_directio_off(src->file->fd) == NGX_FILE_ERROR) {
-                ngx_log_error(NGX_LOG_ALERT, ctx->pool->log, ngx_errno,
-                              ngx_directio_off_n " \"%s\" failed",
-                              src->file->name.data);
+                ngx_log_error(NGX_LOG_ALERT, ctx->pool->log, ngx_errno, ngx_directio_off_n " \"%s\" failed", src->file->name.data);
             }
         }
-
 #endif
-
 #if (NGX_HAVE_FILE_AIO)
-
         if (ctx->aio_handler) {
-            n = ngx_file_aio_read(src->file, dst->pos, (size_t) size,
-                                  src->file_pos, ctx->pool);
+            n = ngx_file_aio_read(src->file, dst->pos, (size_t) size,  src->file_pos, ctx->pool);
             if (n == NGX_AGAIN) {
                 ctx->aio_handler(ctx, src->file);
                 return NGX_AGAIN;
             }
 
         } else {
-            n = ngx_read_file(src->file, dst->pos, (size_t) size,
-                              src->file_pos);
+            n = ngx_read_file(src->file, dst->pos, (size_t) size, src->file_pos);
         }
 #else
-
         n = ngx_read_file(src->file, dst->pos, (size_t) size, src->file_pos);
-
 #endif
 
 #if (NGX_HAVE_ALIGNED_DIRECTIO)
 
         if (ctx->unaligned) {
             ngx_err_t  err;
-
             err = ngx_errno;
-
             if (ngx_directio_on(src->file->fd) == NGX_FILE_ERROR) {
-                ngx_log_error(NGX_LOG_ALERT, ctx->pool->log, ngx_errno,
-                              ngx_directio_on_n " \"%s\" failed",
-                              src->file->name.data);
+                ngx_log_error(NGX_LOG_ALERT, ctx->pool->log, ngx_errno, ngx_directio_on_n " \"%s\" failed",  src->file->name.data);
             }
-
             ngx_set_errno(err);
-
             ctx->unaligned = 0;
         }
 
 #endif
-
         if (n == NGX_ERROR) {
             return (ngx_int_t) n;
         }
-
         if (n != size) {
-            ngx_log_error(NGX_LOG_ALERT, ctx->pool->log, 0,
-                          ngx_read_file_n " read only %z of %O from \"%s\"",
-                          n, size, src->file->name.data);
+            ngx_log_error(NGX_LOG_ALERT, ctx->pool->log, 0, ngx_read_file_n " read only %z of %O from \"%s\"", n, size, src->file->name.data);
             return NGX_ERROR;
         }
 
         dst->last += n;
-
         if (sendfile) {
             dst->in_file = 1;
             dst->file = src->file;
@@ -496,35 +472,31 @@ ngx_output_chain_copy_buf(ngx_output_chain_ctx_t *ctx)
         } else {
             dst->in_file = 0;
         }
-
         src->file_pos += n;
-
         if (src->file_pos == src->file_last) {
             dst->flush = src->flush;
             dst->last_buf = src->last_buf;
             dst->last_in_chain = src->last_in_chain;
         }
     }
-
     return NGX_OK;
 }
 
 
 ngx_int_t
 ngx_chain_writer(void *data, ngx_chain_t *in)
-{
-    ngx_chain_writer_ctx_t *ctx = data;
+{//ngx_output_chainµ÷ÓÃÕâÀï£¬½«Êý¾Ý·¢ËÍ³öÈ¥¡£Êý¾ÝÒÑ¾­¿½±´µ½in²ÎÊýÀïÃæÁË¡£àÇÓÃ·½Ê½;(ctx->filter_ctx, out);£¬outÎªÒª·¢ËÍµÄbufÁ´±íÍ·²¿¡£
+    ngx_chain_writer_ctx_t *ctx = data;//ctxÓÀÔ¶Ö¸ÏòÁ´±íÍ·²¿¡£ÆänextÖ¸ÕëÖ¸ÏòÏÂÒ»¸ö½Úµã¡£µ«ÊÇlastÖ¸ÕëÈ´Ö¸Ïò
     off_t              size;
     ngx_chain_t       *cl;
     ngx_connection_t  *c;
     c = ctx->connection;
+	/*ÏÂÃæµÄÑ­»·£¬½«inÀïÃæµÄÃ¿Ò»¸öÁ´½Ó½Úµã£¬Ìí¼Óµ½u->writerËùÖ¸µÄÁ´±íÖÐ¡£²¢¼ÇÂ¼ÕâÐ©inµÄÁ´±íµÄ´óÐ¡¡£*/
     for (size = 0; in; in = in->next) {//±éÀúÕû¸öÊäÈë»º³åÁ´±í¡£½«ÊäÈë»º³å¹Ò½Óµ½ctxÀïÃæ¡£
-#if 1
         if (ngx_buf_size(in->buf) == 0 && !ngx_buf_special(in->buf)) {
             ngx_debug_point();
         }
-#endif
-        size += ngx_buf_size(in->buf);//¼ÆËãÕâ¸ö½ÚµãµÄÊý¾Ý´óÐ¡¡£
+        size += ngx_buf_size(in->buf);//¼ÆËãÕâ¸ö½ÚµãµÄÊý¾Ý´óÐ¡¡£½øÐÐÀÛ¼Ó¡£Õâ¸ö´óÐ¡Ä¿Ç°ÆäÊµÃ»Ê²Ã´ÓÃ£¬Ö»ÊÇÎªÁËÅÐ¶ÏÊÇ·ñ»¹ÓÐÊý¾ÝÃ»ÓÐ·¢ËÍÍê±Ï¡£
         ngx_log_debug2(NGX_LOG_DEBUG_CORE, c->log, 0, "chain writer buf fl:%d s:%uO", in->buf->flush, ngx_buf_size(in->buf));
         cl = ngx_alloc_chain_link(ctx->pool);//·ÖÅäÒ»¸öÁ´½Ó½Úµã£¬´ý»á¹Òµ½ctxÀïÃæ
         if (cl == NULL) {
@@ -533,24 +505,23 @@ ngx_chain_writer(void *data, ngx_chain_t *in)
 
         cl->buf = in->buf;//Ö¸ÏòÊäÈëµÄ»º³å
         cl->next = NULL;
-        *ctx->last = cl;//¹Òµ½ctxµÄlast´¦
-        ctx->last = &cl->next;
+        *ctx->last = cl;//¹Òµ½ctxµÄlast´¦£¬Ò²¾ÍÊÇ¹ÒÔØµ½Á´±íµÄ×îºóÃæ¡£³õÊ¼»¯µÄÊ±ºòÊÇu->writer.last = &u->writer.out;£¬Ò²¾ÍÊÇ³õÊ¼Ê±Ö¸Ïò×Ô¼ºµÄÍ·²¿µØÖ·¡£
+        ctx->last = &cl->next;//ÏòºóÒÆ¶¯lastÖ¸Õë£¬Ö¸ÏòÐÂµÄ×îºóÒ»¸ö½ÚµãµÄnext±äÁ¿µØÖ·¡£
     }
     ngx_log_debug1(NGX_LOG_DEBUG_CORE, c->log, 0, "chain writer in: %p", ctx->out);
 
-    for (cl = ctx->out; cl; cl = cl->next) {//ÕâÊÇÉ¶£¬Òª·¢ËÍµÄ»º´æ
-#if 1
+    for (cl = ctx->out; cl; cl = cl->next) {//±éÀú¸Õ¸Õ×¼±¸µÄÁ´±í£¬²¢Í³¼ÆÆä´óÐ¡£¬ÕâÊÇÉ¶ÒâË¼?ctx->outÎªÁ´±íÍ·
         if (ngx_buf_size(cl->buf) == 0 && !ngx_buf_special(cl->buf)) {
             ngx_debug_point();
         }
-#endif
         size += ngx_buf_size(cl->buf);
     }
     if (size == 0 && !c->buffered) {//É¶Êý¾Ý¶¼Ã´ÓÐ£¬²»ÓÃ·¢ÁË¶¼
         return NGX_OK;
     }
 	//µ÷ÓÃwritev½«ctx->outµÄÊý¾ÝÈ«²¿·¢ËÍ³öÈ¥¡£Èç¹ûÃ»·¨ËÍÍê£¬Ôò·µ»ØÃ»·¨ËÍÍê±ÏµÄ²¿·Ö¡£¼ÇÂ¼µ½outÀïÃæ
-    ctx->out = c->send_chain(c, ctx->out, ctx->limit);//ÔÚngx_event_connect_peerÁ¬½ÓÉÏÓÎ·þÎñÆ÷µÄÊ±ºòÉèÖÃµÄ·¢ËÍÁ´½Óº¯Êýngx_send_chain=ngx_writev_chain¡£
+	//ÔÚngx_event_connect_peerÁ¬½ÓÉÏÓÎ·þÎñÆ÷µÄÊ±ºòÉèÖÃµÄ·¢ËÍÁ´½Óº¯Êýngx_send_chain=ngx_writev_chain¡£
+    ctx->out = c->send_chain(c, ctx->out, ctx->limit);
     ngx_log_debug1(NGX_LOG_DEBUG_CORE, c->log, 0,  "chain writer out: %p", ctx->out);
     if (ctx->out == NGX_CHAIN_ERROR) {
         return NGX_ERROR;

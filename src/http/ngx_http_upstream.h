@@ -75,7 +75,7 @@ typedef ngx_int_t (*ngx_http_upstream_init_peer_pt)(ngx_http_request_t *r,
 
 
 typedef struct {
-    ngx_http_upstream_init_pt        init_upstream;//ngx_http_upstream_init_ip_hash函数等。
+    ngx_http_upstream_init_pt        init_upstream;//ngx_http_upstream_init_ip_hash函数等。默认为ngx_http_upstream_init_round_robin
     ngx_http_upstream_init_peer_pt   init;
     void                            *data;
 } ngx_http_upstream_peer_t;
@@ -258,7 +258,7 @@ struct ngx_http_upstream_s {//本结构体用来保存一个连接的upstream信息，包括各种需
     //也可能是代表要发送给后端的数据链表结构，比如ngx_http_proxy_create_request会这么放的。比如是FCGI结构数据，或者Proxy结构等。
 
     ngx_output_chain_ctx_t           output;//输出数据的结构，里面存有要发送的数据，以及发送的output_filter指针
-    ngx_chain_writer_ctx_t           writer;
+    ngx_chain_writer_ctx_t           writer;//参考ngx_chain_writer，里面会将输出buf一个个连接到这里。
 
     ngx_http_upstream_conf_t        *conf;//为u->conf = &flcf->upstream;
 

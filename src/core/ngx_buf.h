@@ -79,8 +79,8 @@ typedef void (*ngx_output_chain_aio_pt)(ngx_output_chain_ctx_t *ctx,
 struct ngx_output_chain_ctx_s {
     ngx_buf_t                   *buf;
     ngx_chain_t                 *in;//所有待发送的数据放在这里，是个链表。
-    ngx_chain_t                 *free;
-    ngx_chain_t                 *busy;
+    ngx_chain_t                 *free;//已经发送完毕的内存
+    ngx_chain_t                 *busy;//发送了一部分的
 
     unsigned                     sendfile:1;
     unsigned                     directio:1;
@@ -108,8 +108,8 @@ struct ngx_output_chain_ctx_s {
 
 
 typedef struct {
-    ngx_chain_t                 *out;//还没有发送出去的待发送数据。
-    ngx_chain_t                **last;
+    ngx_chain_t                 *out;//还没有发送出去的待发送数据的头部
+    ngx_chain_t                **last;//永远指向最优一个ngx_chain_t的next字段的地址。这样可以通过这个地址不断的在后面增加元素。
     ngx_connection_t            *connection;//我这个输出链表对应的连接
     ngx_pool_t                  *pool;
     off_t                        limit;

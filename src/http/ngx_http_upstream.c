@@ -471,8 +471,9 @@ ngx_http_upstream_init_request(ngx_http_request_t *r)
     u->output.pool = r->pool;
     u->output.bufs.num = 1;
     u->output.bufs.size = clcf->client_body_buffer_size;
-    u->output.output_filter = ngx_chain_writer;//设置过滤模块的开始过滤函数为writer。，也就是output_filter
-    u->output.filter_ctx = &u->writer;
+	//设置过滤模块的开始过滤函数为writer。也就是output_filter。在ngx_output_chain被调用已进行数据的过滤
+    u->output.output_filter = ngx_chain_writer;
+    u->output.filter_ctx = &u->writer;//参考ngx_chain_writer，里面会将输出buf一个个连接到这里。
 
     u->writer.pool = r->pool;
     if (r->upstream_states == NULL) {//数组upstream_states，保留upstream的状态信息。
@@ -834,9 +835,9 @@ ngx_http_upstream_handler(ngx_event_t *ev)
     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, c->log, 0, "http upstream request: \"%V?%V\"", &r->uri, &r->args);
 
     if (ev->write) {
-        u->write_event_handler(r, u);
+        u->write_event_handler(r, u);//ngx_http_upstream_send_request_handler
     } else {
-        u->read_event_handler(r, u);
+        u->read_event_handler(r, u);//ngx_http_upstream_process_header
     }
     ngx_http_run_posted_requests(c);
 }
@@ -991,12 +992,12 @@ static void ngx_http_upstream_connect(ngx_http_request_t *r, ngx_http_upstream_t
     /* rc == NGX_OK || rc == NGX_AGAIN */
     c = u->peer.connection;//得到这个peer新建立的连接结构。
     c->data = r;//记住我这个连接属于哪个请求。
-    c->write->handler = ngx_http_upstream_handler;//设置这个连接的读写事件结构。这是真正的读写事件回调。
+    c->write->handler = ngx_http_upstream_handler;//设置这个连接的读写事件结构。这是真正的读写事件回调。里面会调用write_event_handler。
     c->read->handler = ngx_http_upstream_handler;//这个是读写事件的统一回调函数，不过自己会根据读还是写调用对应的write_event_handler等
 
 	//一个upstream的读写回调，专门做跟upstream有关的事情。上面的基本读写事件回调ngx_http_upstream_handler会调用下面的函数完成upstream对应的事情。
 	u->write_event_handler = ngx_http_upstream_send_request_handler;//设置写事件的处理函数。
-    u->read_event_handler = ngx_http_upstream_process_header;
+    u->read_event_handler = ngx_http_upstream_process_header;//读回调
 
     c->sendfile &= r->connection->sendfile;
     u->output.sendfile = c->sendfile;
@@ -1006,15 +1007,14 @@ static void ngx_http_upstream_connect(ngx_http_request_t *r, ngx_http_upstream_t
     c->read->log = c->log;
     c->write->log = c->log;
     /* init or reinit the ngx_output_chain() and ngx_chain_writer() contexts */
-    u->writer.out = NULL;
-    u->writer.last = &u->writer.out;
+    u->writer.out = NULL;//这是i用来给ngx_chain_write函数记录发送缓冲区的。
+    u->writer.last = &u->writer.out;//指向自己的头部。形成循环的结构。
     u->writer.connection = c;
     u->writer.limit = 0;
 
     if (u->request_sent) {//如果是已经发送了请求。却还需要连接，得重新初始化一下
         if (ngx_http_upstream_reinit(r, u) != NGX_OK) {
-            ngx_http_upstream_finalize_request(r, u,
-                                               NGX_HTTP_INTERNAL_SERVER_ERROR);
+            ngx_http_upstream_finalize_request(r, u, NGX_HTTP_INTERNAL_SERVER_ERROR);
             return;
         }
     }
@@ -1031,7 +1031,8 @@ static void ngx_http_upstream_connect(ngx_http_request_t *r, ngx_http_upstream_t
             ngx_http_upstream_finalize_request(r, u, NGX_HTTP_INTERNAL_SERVER_ERROR);
             return;
         }//待会需要释放的东西。
-        u->output.free->buf = r->request_body->buf;//指向请求的BODY数据部分，啥意思?
+        //指向请求的BODY数据部分，啥意思?把数据放到output变量里面，待会到send_request里面会拷贝到输出链表进行发送
+        u->output.free->buf = r->request_body->buf;
         u->output.free->next = NULL;
         u->output.allocated = 1;
 		//清空这块内存，干嘛呢?因为请求的FCGI数据已经拷贝到了ngx_http_upstream_s的request_bufs链接表里面
@@ -1204,8 +1205,10 @@ ngx_http_upstream_send_request(ngx_http_request_t *r, ngx_http_upstream_t *u)
     }
     c->log->action = "sending request to upstream";
 	//下面开始过滤模块的过程。对请求的FCGI数据进行过滤，里面会调用ngx_chain_writer，将数据用writev发送出去
+	//ngx_http_upstream_connect将客户端发送的数据拷贝到这里，如果是从读写事件回调进入的，则这里的request_sent应该为1，
+	//表示数据已经拷贝到输出链了。这份数据是在ngx_http_upstream_init_request里面调用处理模块比如FCGI的create_request处理的，解析为FCGI的结构数据。
     rc = ngx_output_chain(&u->output, u->request_sent ? NULL : u->request_bufs);
-    u->request_sent = 1;//标志位数据已经发送完毕
+    u->request_sent = 1;//标志位数据已经发送完毕,指的是放入输出列表里面，不一定发送出去了。
 
     if (rc == NGX_ERROR) {//如果出错，继续
         ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_ERROR);
@@ -1285,9 +1288,8 @@ ngx_http_upstream_send_request_handler(ngx_http_request_t *r, ngx_http_upstream_
 }
 
 
-static void
-ngx_http_upstream_process_header(ngx_http_request_t *r, ngx_http_upstream_t *u)
-{//读取FCGI头部数据
+static void ngx_http_upstream_process_header(ngx_http_request_t *r, ngx_http_upstream_t *u)
+{//读取FCGI头部数据，或者proxy头部数据。
     ssize_t            n;
     ngx_int_t          rc;
     ngx_connection_t  *c;
@@ -3115,9 +3117,7 @@ ngx_http_upstream_copy_allow_ranges(ngx_http_request_t *r,
     if (ho == NULL) {
         return NGX_ERROR;
     }
-
     *ho = *h;
-
     r->headers_out.accept_ranges = ho;
 
     return NGX_OK;
@@ -3664,6 +3664,8 @@ invalid:
 ngx_http_upstream_srv_conf_t *
 ngx_http_upstream_add(ngx_conf_t *cf, ngx_url_t *u, ngx_uint_t flags)
 {//如果u代表的server已经存在，则返回句柄，否则在umcf->upstreams里面新加一个，设置初始化。
+//在ngx_http_fastcgi_pass等碰到后端地址的地方，会调用这个函数，增加一个upstream的server.
+//这里的单位是upstream，不是server行，调用的上层一般只有一个地址，于是就只有一个server.当做单个upstream处理
     ngx_uint_t                      i;
     ngx_http_upstream_server_t     *us;
     ngx_http_upstream_srv_conf_t   *uscf, **uscfp;
@@ -3707,7 +3709,7 @@ ngx_http_upstream_add(ngx_conf_t *cf, ngx_url_t *u, ngx_uint_t flags)
         }
         return uscfp[i];//找到相同的配置数据了，直接返回它的指针。
     }
-	//没有找到相同的配置upstream，下面创建一个。这里的srv_conf跟server{}不是一回事
+	//没有找到相同的配置upstream，下面创建一个。这里的srv_conf跟server{}不是一回事,是指upstream{}里面的server xxxx:xxx;行
     uscf = ngx_pcalloc(cf->pool, sizeof(ngx_http_upstream_srv_conf_t));
     if (uscf == NULL) {
         return NULL;
@@ -3907,7 +3909,8 @@ ngx_http_upstream_create_main_conf(ngx_conf_t *cf)
 
 static char *
 ngx_http_upstream_init_main_conf(ngx_conf_t *cf, void *conf)
-{//初始化upstream模块的main_conf数据
+{//初始化upstream模块的main_conf数据,在http{}指令解析完成之前会先create,完成之后init之
+//下面只是将ngx_http_upstream_headers_in放入umcf->headers_in_hash里面。
     ngx_http_upstream_main_conf_t  *umcf = conf;
 
     ngx_uint_t                      i;
