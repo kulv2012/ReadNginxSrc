@@ -102,7 +102,7 @@ ngx_module_t  ngx_http_access_module = {
 
 static ngx_int_t
 ngx_http_access_handler(ngx_http_request_t *r)
-{//NGX_HTTP_ACCESS_PHASE的一部分，进行访问权限控制
+{//NGX_HTTP_ACCESS_PHASE的一部分，进行访问权限控制，很简单。
     struct sockaddr_in          *sin;
     ngx_http_access_loc_conf_t  *alcf;
     alcf = ngx_http_get_module_loc_conf(r, ngx_http_access_module);//获取ngx_http_access_module模块在r中的配置。此处的r指的是当时对应的loc
@@ -126,7 +126,7 @@ ngx_http_access_handler(ngx_http_request_t *r)
 
     if (alcf->rules && r->connection->sockaddr->sa_family == AF_INET) {
         sin = (struct sockaddr_in *) r->connection->sockaddr;
-        return ngx_http_access_inet(r, alcf, sin->sin_addr.s_addr);
+        return ngx_http_access_inet(r, alcf, sin->sin_addr.s_addr);//根据配置的access指令，和其IP掩码判断客户端IP是否在禁止列表里面。
     }
 
     return NGX_DECLINED;
@@ -135,7 +135,7 @@ ngx_http_access_handler(ngx_http_request_t *r)
 
 static ngx_int_t
 ngx_http_access_inet(ngx_http_request_t *r, ngx_http_access_loc_conf_t *alcf, in_addr_t addr)
-{
+{//根据配置的access指令，和其IP掩码判断客户端IP是否在禁止列表里面。
     ngx_uint_t               i;
     ngx_http_access_rule_t  *rule;
     rule = alcf->rules->elts;
@@ -143,7 +143,7 @@ ngx_http_access_inet(ngx_http_request_t *r, ngx_http_access_loc_conf_t *alcf, in
         ngx_log_debug3(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,  "access: %08XD %08XD %08XD", addr, rule[i].mask, rule[i].addr);
         if ((addr & rule[i].mask) == rule[i].addr) {//如果地址对的上，就调用下面的进行判定。
         //如果要对所有，那么rule[i].addr肯定为0,前面的mask也为0，也就等于。
-            return ngx_http_access_found(r, rule[i].deny);
+            return ngx_http_access_found(r, rule[i].deny);//根据deny是否为0决定是否屏蔽。
         }
     }
     return NGX_DECLINED;
@@ -199,7 +199,7 @@ ngx_http_access_inet6(ngx_http_request_t *r, ngx_http_access_loc_conf_t *alcf,
 
 static ngx_int_t
 ngx_http_access_found(ngx_http_request_t *r, ngx_uint_t deny)
-{
+{//根据参数deny来决定是屏蔽或者接受。
     ngx_http_core_loc_conf_t  *clcf;
     if (deny) {//是要进行访问权限禁止，那就拒绝掉。
         clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);

@@ -19,7 +19,8 @@ typedef ngx_int_t   ngx_rbtree_key_int_t;
 typedef struct ngx_rbtree_node_s  ngx_rbtree_node_t;
 
 struct ngx_rbtree_node_s {
-    ngx_rbtree_key_t       key;
+    ngx_rbtree_key_t       key;//定时器超时的时间点，这样的话可以充分利用红黑树的左右大小关系。进行lg(n)的查找，删除。
+    //也可能是哈希数据如ngx_crc32_short(vv->data, len);等用来标识一个节点。方便根据key查找value
     ngx_rbtree_node_t     *left;
     ngx_rbtree_node_t     *right;
     ngx_rbtree_node_t     *parent;

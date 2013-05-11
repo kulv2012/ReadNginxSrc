@@ -712,7 +712,7 @@ done:
 
 ngx_int_t
 ngx_http_parse_header_line(ngx_http_request_t *r, ngx_buf_t *b, ngx_uint_t allow_underscores)
-{//解析请求的HEADER部分，每次一行。
+{//解析请求的HEADER部分，每次一行。解析GET、POST行是用ngx_http_parse_request_line完成的。
     u_char      c, ch, *p;
     ngx_uint_t  hash, i;
     enum {

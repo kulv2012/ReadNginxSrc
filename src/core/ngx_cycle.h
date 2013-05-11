@@ -26,9 +26,9 @@ typedef struct ngx_shm_zone_s  ngx_shm_zone_t;
 typedef ngx_int_t (*ngx_shm_zone_init_pt) (ngx_shm_zone_t *zone, void *data);
 
 struct ngx_shm_zone_s {
-    void                     *data;
-    ngx_shm_t                 shm;
-    ngx_shm_zone_init_pt      init;
+    void                     *data;//ngx_http_limit_zone_ctx_t等结构。
+    ngx_shm_t                 shm;//共享内存数据结构
+    ngx_shm_zone_init_pt      init;//ngx_http_limit_req_init_zone等。
     void                     *tag;
 };
 
@@ -47,7 +47,7 @@ struct ngx_cycle_s {
     ngx_array_t               listening;//监听套接字的数组
     ngx_array_t               pathes;
     ngx_list_t                open_files;//这里打开的文件链表
-    ngx_list_t                shared_memory;
+    ngx_list_t                shared_memory;//共享内存结构，limit_req_zon等用这个来记录请求数据。
 
     ngx_uint_t                connection_n;//配置中的worker_connections
     ngx_uint_t                files_n;

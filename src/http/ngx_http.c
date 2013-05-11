@@ -370,6 +370,7 @@ ngx_http_init_headers_in_hash(ngx_conf_t *cf, ngx_http_core_main_conf_t *cmcf)
 static ngx_int_t
 ngx_http_init_phase_handlers(ngx_conf_t *cf, ngx_http_core_main_conf_t *cmcf)
 {//½«¸÷¸ö½×¶ÎµÄ×¢²á¾ä±úÕ¹¿ªÎªÊı×é£¬·½±ãngx_http_core_run_phases½øĞĞ±éÀú´¦Àí
+//Õâ¸öº¯Êı½«cmcf->phases[].handlers.neltsÀïÃæµÄ»Øµ÷º¯ÊıÈ«²¿Õ¹Æ½ÁË¡£
     ngx_int_t                   j;
     ngx_uint_t                  i, n;
     ngx_uint_t                  find_config_index, use_rewrite, use_access;
@@ -383,13 +384,13 @@ ngx_http_init_phase_handlers(ngx_conf_t *cf, ngx_http_core_main_conf_t *cmcf)
 	//ÊÇ·ñÓĞÊ¹ÓÃrewriteÒÔ¼°access¡£
     use_rewrite = cmcf->phases[NGX_HTTP_REWRITE_PHASE].handlers.nelts ? 1 : 0;
     use_access = cmcf->phases[NGX_HTTP_ACCESS_PHASE].handlers.nelts ? 1 : 0;
-
+	//try_files $uri $uri/ /index.php?q=$uri&$args;£¬¼ÓÉÏÊÇ·ñÅäÖÃÁËtry_filesÖ¸Áî
     n = use_rewrite + use_access + cmcf->try_files + 1 /* find config phase */;//ÕâÀïÎªÉ¶ÒªÔö¼ÓÄØ£¬ÒòÎªÓĞ¸öÄ¬ÈÏµÄÂğå?
     for (i = 0; i < NGX_HTTP_LOG_PHASE; i++) {//¶ÔÃ¿Ò»¸ö¼ä¶Ï£¬Í³¼ÆÆä¾ä±úÊıÄ¿¡£¿ªÊ¼¼ÆËãhandler Êı×éµÄ´óĞ¡  
-        n += cmcf->phases[i].handlers.nelts;//Õâ¸öÔÚÄÄÀïÉèÖÃµÄ?´ğ°¸ÔÚngx_http_module_tÀïÃæµÄpostconfiguration»Øµ÷¡£
+        n += cmcf->phases[i].handlers.nelts;//Õâ¸öÔÚÄÄÀïÉèÖÃµÄ?´ğ°¸ÔÚngx_http_module_tÀïÃæµÄpostconfiguration»Øµ÷¡£±ÈÈçngx_http_autoindex_moduleÄ£¿é
         //±ÈÈçÈç¹ûÅöµ½accessÖ¸Áî£¬¾Í»áÉèÖÃpostconfiguration=ngx_http_access_init£¬ºóÕßÀïÃæ»á×¢²áhandlersµÄ£¬±íÊ¾ÎÒ¹ØĞÄÕâ¸ö½×¶ÎµÄ´¦Àí¡£
     }
-
+	//¸ù¾İ»Øµ½µÄ¾ä±úÊıÄ¿£¬ÉêÇëÕâÃ´¶à¸öÊı×éÏî¡£
     ph = ngx_pcalloc(cf->pool,n * sizeof(ngx_http_phase_handler_t) + sizeof(void *));
     if (ph == NULL) {
         return NGX_ERROR;
@@ -398,7 +399,7 @@ ngx_http_init_phase_handlers(ngx_conf_t *cf, ngx_http_core_main_conf_t *cmcf)
     cmcf->phase_engine.handlers = ph;//ËùÓĞµÄhandler¶¼ÔÚÕâ¸öÊı×éÀïÃæ.
     n = 0;
     for (i = 0; i < NGX_HTTP_LOG_PHASE; i++) {//¶ÔÓÚÃ¿Ò»¸ö´¦Àí½×¶Î£¬½«ÆäÕ¹Æ½
-        h = cmcf->phases[i].handlers.elts;//È¡µÃµ±Ç°Ò»¸ö¹ı³ÌµÄ¾ä±úÊı×é
+        h = cmcf->phases[i].handlers.elts;//È¡µÃµ±Ç°Ò»¸ö¹ı³ÌµÄ¾ä±úÊı×é£¬Õâ¸öÊÇ¸÷¸öÄ£¿é×¢²áµÄ¡£
 
         switch (i) {//¶Ô²»Í¬µÄ½×¶Î½øĞĞ²»Í¬µÄ´¦Àí¡£
         case NGX_HTTP_SERVER_REWRITE_PHASE:
@@ -409,7 +410,8 @@ ngx_http_init_phase_handlers(ngx_conf_t *cf, ngx_http_core_main_conf_t *cmcf)
             break;//Ìøµ½ºóÃæ½øĞĞ´¦Àí£¬»á¿½±´Ïà¹Ø½á¹¹
 
         case NGX_HTTP_FIND_CONFIG_PHASE:
-            find_config_index = n;
+            find_config_index = n;//FIND_CONFIG_PHASEÃ´ÓĞºÜ¶à¾ä±ú»Øµ÷ĞèÒª´¦Àí£¬¾ÍÒ»¸ö£¬ËùÒÔ¾ÍÖ±½ÓcontinueÁË¡£
+            //Æänext³ÉÔ±Îª0£¬ËùÒÔÕâÀïÈç¹ûÕÒµ½ÁËÅäÖÃ£¬»áÖØĞÂ´ÓµÚÒ»²¿¿ªÊ¼µÄ¡£
             ph->checker = ngx_http_core_find_config_phase;//¶ÔÓÚÅäÖÃ²éÕÒ£¬Ö»ĞèÒªÉèÖÃchecker¾ÍĞĞ£¬Ã»ÓĞhandlerĞèÒªÉèÖÃ¡£
             n++;//¼ÆÊı
             ph++;//Ìøµ½ÏÂÒ»¸ö
@@ -423,9 +425,9 @@ ngx_http_init_phase_handlers(ngx_conf_t *cf, ngx_http_core_main_conf_t *cmcf)
             break;
 
         case NGX_HTTP_POST_REWRITE_PHASE:
-            if (use_rewrite) {
+            if (use_rewrite) {//¾ÍÒ»¸ö£¬Ö±½Ócontinue
                 ph->checker = ngx_http_core_post_rewrite_phase;
-                ph->next = find_config_index;//Á´½ÓÆğÀ´£¬ĞŞ¸ÄÁËrewriteºó£¬ĞèÒªÔÙ½øĞĞÅäÖÃ²éÕÒ
+                ph->next = find_config_index;//Á´½ÓÆğÀ´£¬ĞŞ¸ÄÁËrewriteºó£¬ĞèÒªÔÙ½øĞĞÅäÖÃ²éÕÒ,Í¨¹ıÕâ¸ö·½Ê½½øĞĞÑ­»·»áÌø¡£
                 n++;
                 ph++;
             }
@@ -462,11 +464,11 @@ ngx_http_init_phase_handlers(ngx_conf_t *cf, ngx_http_core_main_conf_t *cmcf)
 
         n += cmcf->phases[i].handlers.nelts;
 //¶ÔÓÚ¿ÉÄÜÓĞ¶à¸ö¾ä±ú×¢²áµÄ½×¶Î£¬ĞèÒªÒ»¸ö¸ö¿½±´¡£ËûÃÇµÄcheckerÏàÍ¬£¬µ«ÊÇhandler²»Í¬¡£ÔÚËûÃÇ×¢²áµÄÊ±ºòÉèÖÃµÄ£¬±ÈÈçngx_http_access_init
-        for (j = cmcf->phases[i].handlers.nelts - 1; j >=0; j--) {
+        for (j = cmcf->phases[i].handlers.nelts - 1; j >=0; j--) {//´ÓºóÃæÍùÇ°Ãæ¿½±´¡£ÎªÉ¶µ¹Ğò?
             ph->checker = checker;//checkerÏàÍ¬
             ph->handler = h[j];//handler²»Í¬¡£Èç¹ûÎÒÃÇĞèÒª½øĞĞÄ£¿é¿ª·¢£¬ÔòĞèÒª×¢²á¶ÔÓ¦µÄ½×¶ÎµÄ¾ä±ú¡£
-            ph->next = n;//ÏÂÒ»¸öÊÇµÚ¼¸¸ö£¬±ê¼ÇÆäÏÂ±ê¡£
-            ph++;//Ñ­»·µ½ÏÂÒ»¸öÄ£¿é
+            ph->next = n;//ÏÂÒ»¸öÊÇµÚ¼¸¸ö£¬±ê¼ÇÆäÏÂ±ê¡£ÆäÊµ´ú±íµÄÊÇÏÂÒ»¸ö´¦Àí¹ı³ÌÀàĞÍÊÇµÚ¼¸¸ö
+            ph++;//Ñ­»·µ½ÏÂÒ»¸öÍ¬ÀàĞÍµÄÄ£¿éµÄ»Øµ÷
         }
     }
 
@@ -650,7 +652,7 @@ ngx_http_init_locations(ngx_conf_t *cf, ngx_http_core_srv_conf_t *cscf, ngx_http
 
 static ngx_int_t
 ngx_http_init_static_location_trees(ngx_conf_t *cf, ngx_http_core_loc_conf_t *pclcf)
-{//ÉÏ²ãµ÷ÓÃÕßÑ­»·Ã¿¸öserver£¬µ÷ÓÃÕâÀï¼òÀúÒ»¿Ålocations°üº¬Æ¥ÅäµÄÊ÷£¬ÒÔÓÅ»¯²éÑ¯ËÙ¶È¡£
+{//ÉÏ²ãµ÷ÓÃÕßÑ­»·Ã¿¸öserver£¬µ÷ÓÃÕâÀï½¨Á¢Ò»¿Ålocations°üº¬Æ¥ÅäµÄÊ÷£¬ÒÔÓÅ»¯²éÑ¯ËÙ¶È¡£
 //ÏÂÃæ·Ö2²½£¬µÚÒ»²½ÎªÊáÀílocationsÁ´½Ó£¬½¨Á¢Ò»¿ÅÇ°×ºÊ÷
     ngx_queue_t                *q, *locations;
     ngx_http_core_loc_conf_t   *clcf;

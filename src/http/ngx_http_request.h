@@ -363,7 +363,7 @@ struct ngx_http_request_s {
 
     ngx_pool_t                       *pool;//一个HTTP请求结构体一个POOL，大小为request_pool_size。其对应的连接也有个POOL
     ngx_buf_t                        *header_in;//header信息的缓存buffer，通过这个缓存对header进行分析
-    ngx_http_headers_in_t             headers_in;//请求的header结构体
+    ngx_http_headers_in_t             headers_in;//请求的header结构体，客户端发送过来的头部数据
     ngx_http_headers_out_t            headers_out;//输出给客户端的头部数据
 
     ngx_http_request_body_t          *request_body;//客户端发送过来的POST数据存放在此,ngx_http_read_client_request_body放的
@@ -393,7 +393,7 @@ struct ngx_http_request_s {
 
     ngx_http_virtual_names_t         *virtual_names;//什么东西。r->virtual_names = addr_conf->virtual_names;
 
-    ngx_int_t                         phase_handler;
+    ngx_int_t                         phase_handler;//进行各个phrases的解析时，代表当前处理到了第几个cmcf->phase_engine.handlers数组下标了。
     ngx_http_handler_pt               content_handler;
     ngx_uint_t                        access_code;
 
@@ -446,7 +446,7 @@ struct ngx_http_request_s {
     unsigned                          valid_location:1;
     unsigned                          valid_unparsed_uri:1;
     unsigned                          uri_changed:1;
-    unsigned                          uri_changes:4;
+    unsigned                          uri_changes:4;//进行重定向的最多次数为11次，每次不断减少1.
 
     unsigned                          request_body_in_single_buf:1;
     unsigned                          request_body_in_file_only:1;/*这个指令始终存储一个连接请求实体到一个文件即使它只有0字节。
@@ -491,7 +491,7 @@ struct ngx_http_request_s {
     unsigned                          chunked:1;
     unsigned                          header_only:1;
     unsigned                          keepalive:1;//跟r->headers_in.connection_type对应，连接是否关闭等
-    unsigned                          lingering_close:1;
+    unsigned                          lingering_close:1;//详见:http://tengine.taobao.org/book/chapter_2.html
     unsigned                          discard_body:1;//是否需要丢弃请求内容部分。
     unsigned                          internal:1;//是否在内部重定向过程中，如果是，则不用从头进行phase处理
     unsigned                          error_page:1;

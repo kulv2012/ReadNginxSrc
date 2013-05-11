@@ -72,7 +72,7 @@ static ngx_command_t  ngx_http_realip_commands[] = {
 };
 
 
-
+//获取用户真实IP的模块
 static ngx_http_module_t  ngx_http_realip_module_ctx = {
     NULL,                                  /* preconfiguration */
     ngx_http_realip_init,                  /* postconfiguration */
@@ -119,7 +119,6 @@ ngx_http_realip_handler(ngx_http_request_t *r)
     ngx_http_realip_loc_conf_t  *rlcf;
 
     ctx = ngx_http_get_module_ctx(r, ngx_http_realip_module);
-
     if (ctx) {
         return NGX_DECLINED;
     }
@@ -134,29 +133,20 @@ ngx_http_realip_handler(ngx_http_request_t *r)
     {
         return NGX_DECLINED;
     }
-
     switch (rlcf->type) {
-
     case NGX_HTTP_REALIP_XREALIP:
-
         if (r->headers_in.x_real_ip == NULL) {
             return NGX_DECLINED;
         }
-
         len = r->headers_in.x_real_ip->value.len;
         ip = r->headers_in.x_real_ip->value.data;
-
         break;
-
     case NGX_HTTP_REALIP_XFWD:
-
         if (r->headers_in.x_forwarded_for == NULL) {
             return NGX_DECLINED;
         }
-
         len = r->headers_in.x_forwarded_for->value.len;
         ip = r->headers_in.x_forwarded_for->value.data;
-
         for (p = ip + len - 1; p > ip; p--) {
             if (*p == ' ' || *p == ',') {
                 p++;
@@ -169,7 +159,6 @@ ngx_http_realip_handler(ngx_http_request_t *r)
         break;
 
     default: /* NGX_HTTP_REALIP_HEADER */
-
         part = &r->headers_in.headers.part;
         header = part->elts;
 
@@ -451,7 +440,7 @@ ngx_http_realip_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 
 static ngx_int_t
 ngx_http_realip_init(ngx_conf_t *cf)
-{
+{//干嘛用的呢
     ngx_http_handler_pt        *h;
     ngx_http_core_main_conf_t  *cmcf;
 
@@ -461,15 +450,14 @@ ngx_http_realip_init(ngx_conf_t *cf)
     if (h == NULL) {
         return NGX_ERROR;
     }
-
-    *h = ngx_http_realip_handler;
+    *h = ngx_http_realip_handler;//在第一步的句柄里面加一个
 
     h = ngx_array_push(&cmcf->phases[NGX_HTTP_PREACCESS_PHASE].handlers);
     if (h == NULL) {
         return NGX_ERROR;
     }
 
-    *h = ngx_http_realip_handler;
+    *h = ngx_http_realip_handler;//在访问权限判断里面也加这个。干什么用的
 
     return NGX_OK;
 }

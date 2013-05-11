@@ -475,56 +475,39 @@ ngx_http_ssl_handshake(ngx_event_t *rev)
     c = rev->data;
     r = c->data;
 
-    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, rev->log, 0,
-                   "http check ssl handshake");
-
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, rev->log, 0, "http check ssl handshake");
     if (rev->timedout) {
         ngx_log_error(NGX_LOG_INFO, c->log, NGX_ETIMEDOUT, "client timed out");
         c->timedout = 1;
         ngx_http_close_request(r, NGX_HTTP_REQUEST_TIME_OUT);
         return;
     }
-
     n = recv(c->fd, (char *) buf, 1, MSG_PEEK);
-
     if (n == -1 && ngx_socket_errno == NGX_EAGAIN) {
-
         if (!rev->timer_set) {
             ngx_add_timer(rev, c->listening->post_accept_timeout);
         }
-
         if (ngx_handle_read_event(rev, 0) != NGX_OK) {
             ngx_http_close_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
         }
-
         return;
     }
 
     if (n == 1) {
         if (buf[0] & 0x80 /* SSLv2 */ || buf[0] == 0x16 /* SSLv3/TLSv1 */) {
-            ngx_log_debug1(NGX_LOG_DEBUG_HTTP, rev->log, 0,
-                           "https ssl handshake: 0x%02Xd", buf[0]);
-
+            ngx_log_debug1(NGX_LOG_DEBUG_HTTP, rev->log, 0,  "https ssl handshake: 0x%02Xd", buf[0]);
             rc = ngx_ssl_handshake(c);
-
             if (rc == NGX_AGAIN) {
-
                 if (!rev->timer_set) {
                     ngx_add_timer(rev, c->listening->post_accept_timeout);
                 }
-
                 c->ssl->handler = ngx_http_ssl_handshake_handler;
                 return;
             }
-
             ngx_http_ssl_handshake_handler(c);
-
             return;
-
         } else {
-            ngx_log_debug0(NGX_LOG_DEBUG_HTTP, rev->log, 0,
-                           "plain http");
-
+            ngx_log_debug0(NGX_LOG_DEBUG_HTTP, rev->log, 0, "plain http");
             r->plain_http = 1;
         }
     }
@@ -896,7 +879,7 @@ ngx_http_process_request_headers(ngx_event_t *rev)
             if (rc != NGX_OK) {
                 return;
             }
-            ngx_http_process_request(r);
+            ngx_http_process_request(r);//然后进入请求处理间断，里面会进入ngx_http_handler->phrases。
             return;
         }
 
@@ -1229,7 +1212,7 @@ ngx_http_process_cookie(ngx_http_request_t *r, ngx_table_elt_t *h,
 
 static ngx_int_t
 ngx_http_process_request_header(ngx_http_request_t *r)
-{//ngx_http_process_request_headers调用这里，读取完毕了所有的头部数据，已经碰到了\n\r。
+{//ngx_http_process_request_headers调用这里，读取完毕了所有的头部数据，已经碰到了\n\r。但没有读取body还
 //对HEADER头部域进行简单处理，解析虚拟主机，请求长度等。调用这里之后，会调用ngx_http_process_request进行请求的处理。
     if (ngx_http_find_virtual_server(r, r->headers_in.server.data, r->headers_in.server.len) == NGX_ERROR) {
         ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
@@ -1280,7 +1263,7 @@ ngx_http_process_request_header(ngx_http_request_t *r)
 
 static void
 ngx_http_process_request(ngx_http_request_t *r)
-{
+{//
     ngx_connection_t  *c;
     c = r->connection;//拿到当前请求的连接结构
     if (r->plain_http) {//是否通过SSL发送明文请求。如果是，关闭连接
@@ -1289,7 +1272,7 @@ ngx_http_process_request(ngx_http_request_t *r)
         return;
     }
 #if (NGX_HTTP_SSL)
-    if (c->ssl) {//如果是ssl
+    if (c->ssl) {//如果是ssl，进行一些跟加密相关的处理，具体不详。
         long                      rc;
         X509                     *cert;
         ngx_http_ssl_srv_conf_t  *sscf;
@@ -1297,9 +1280,7 @@ ngx_http_process_request(ngx_http_request_t *r)
         if (sscf->verify) {
             rc = SSL_get_verify_result(c->ssl->connection);
             if (rc != X509_V_OK) {
-                ngx_log_error(NGX_LOG_INFO, c->log, 0,
-                              "client SSL certificate verify error: (%l:%s)",
-                              rc, X509_verify_cert_error_string(rc));
+                ngx_log_error(NGX_LOG_INFO,c->log,0,"client SSL certificate verify error: (%l:%s)",rc,X509_verify_cert_error_string(rc));
                 ngx_ssl_remove_cached_session(sscf->ssl.ctx, (SSL_get0_session(c->ssl->connection)));
                 ngx_http_finalize_request(r, NGX_HTTPS_CERT_ERROR);
                 return;
@@ -1330,7 +1311,9 @@ ngx_http_process_request(ngx_http_request_t *r)
     c->write->handler = ngx_http_request_handler;
     r->read_event_handler = ngx_http_block_reading;//
 
-    ngx_http_handler(r);//准备长袍
+    ngx_http_handler(r);//请求的头部数据已经读取处理完了，准备长袍，进行头部解析，重定向，
+    //以及content phrase，这个时候会触发ngx_http_fastcgi_handler等内容处理模块，
+    //其里面会调用ngx_http_read_client_request_body->ngx_http_upstream_init从而进入FCGI的处理阶段或者proxy处理阶段。
     ngx_http_run_posted_requests(c);//ngx_http_run_posted_requests函数是处理子请求的。是么
 }
 
@@ -1432,7 +1415,8 @@ found:
 
 static void
 ngx_http_request_handler(ngx_event_t *ev)
-{//一个连接到HTTP阶段后，设置的读写事件回调都是这个。有可读，可写事件都调用这里进行分流
+{//一个连接到HTTP阶段后，设置的读写事件回调都是这个。有可读，可写事件都调用这里进行分流。
+//ngx_http_process_request设置这个。
     ngx_connection_t    *c;
     ngx_http_request_t  *r;
     ngx_http_log_ctx_t  *ctx;
@@ -1468,7 +1452,7 @@ ngx_http_run_posted_requests(ngx_connection_t *c)
             return;
         }
         r = c->data;
-        pr = r->main->posted_requests;
+        pr = r->main->posted_requests;//不断的遍历挂起的子请求，一个个执行他们。
         if (pr == NULL) {
             return;
         }
@@ -1790,6 +1774,28 @@ ngx_http_finalize_connection(ngx_http_request_t *r)
         return;
 
     } else if (r->lingering_close && clcf->lingering_timeout > 0) {
+/*关于lingering_close,http://tengine.taobao.org/book/chapter_2.html
+lingering_close
+lingering_close，字面意思就是延迟关闭，也就是说，当nginx要关闭连接时，并非立即关闭连接，而是再等待一段时间后才真正关掉连接。
+为什么要这样呢？我们先来看看这样一个场景。nginx在接收客户端的请求时，可能由于客户端或服务端出错了，要立即响应错误信息给客户端，
+而nginx在响应错误信息后，大分部情况下是需要关闭当前连接。如果客户端正在发送数据，或数据还没有到达服务端，服务端就将连接关掉了。
+那么，客户端发送的数据会收到RST包，此时，客户端对于接收到的服务端的数据，将不会发送ACK，也就是说，
+客户端将不会拿到服务端发送过来的错误信息数据。那客户端肯定会想，这服务器好霸道，动不动就reset我的连接，连个错误信息都没有。
+
+在上面这个场景中，我们可以看到，关键点是服务端给客户端发送了RST包，导致自己发送的数据在客户端忽略掉了。
+所以，解决问题的重点是，让服务端别发RST包。再想想，我们发送RST是因为我们关掉了连接，关掉连接是因为我们不想再处理此连接了，
+也不会有任何数据产生了。对于全双工的TCP连接来说，我们只需要关掉写就行了，读可以继续进行，我们只需要丢掉读到的任何数据就行了，
+这样的话，当我们关掉连接后，客户端再发过来的数据，就不会再收到RST了。当然最终我们还是需要关掉这个读端的，所以我们会设置一个超时时间，
+在这个时间过后，就关掉读，客户端再发送数据来就不管了，作为服务端我会认为，都这么长时间了，发给你的错误信息也应该读到了，
+再慢就不关我事了，要怪就怪你RP不好了。当然，正常的客户端，在读取到数据后，会关掉连接，此时服务端就会在超时时间内关掉读端。
+这些正是lingering_close所做的事情。协议栈提供 SO_LINGER 这个选项，它的一种配置情况就是来处理lingering_close的情况的，
+不过nginx是自己实现的lingering_close。lingering_close存在的意义就是来读取剩下的客户端发来的数据，所以nginx会有一个读超时时间，
+通过lingering_timeout选项来设置，如果在lingering_timeout时间内还没有收到数据，则直接关掉连接。nginx还支持设置一个总的读取时间，
+通过lingering_time来设置，这个时间也就是nginx在关闭写之后，保留socket的时间，客户端需要在这个时间内发送完所有的数据，
+否则nginx在这个时间过后，会直接关掉连接。当然，nginx是支持配置是否打开lingering_close选项的，通过lingering_close选项来配置。 
+那么，我们在实际应用中，是否应该打开lingering_close呢？这个就没有固定的推荐值了，如Maxim Dounin所说，
+lingering_close的主要作用是保持更好的客户端兼容性，但是却需要消耗更多的额外资源（比如连接会一直占着）。
+*/
         ngx_http_set_lingering_close(r);
         return;
     }
@@ -1919,8 +1925,7 @@ ngx_http_writer(ngx_http_request_t *r)
 static void
 ngx_http_request_finalizer(ngx_http_request_t *r)
 {
-    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "http finalizer done: \"%V?%V\"", &r->uri, &r->args);
+    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,  "http finalizer done: \"%V?%V\"", &r->uri, &r->args);
 
     ngx_http_finalize_request(r, 0);
 }

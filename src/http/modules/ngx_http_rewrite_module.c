@@ -10,9 +10,9 @@
 
 
 typedef struct {
-    ngx_array_t  *codes;        /* uintptr_t */
+    ngx_array_t  *codes;        /* uintptr_t *///此结构保存着code_t的实现函数数组
 
-    ngx_uint_t    stack_size;
+    ngx_uint_t    stack_size;//这个是什么?代码里面找不到
 
     ngx_flag_t    log;
     ngx_flag_t    uninitialized_variable_warn;
@@ -141,7 +141,7 @@ ngx_http_rewrite_handler(ngx_http_request_t *r)
 
     rlcf = ngx_http_get_module_loc_conf(r, ngx_http_rewrite_module);
 
-    if (rlcf->codes == NULL) {
+    if (rlcf->codes == NULL) {//如果没有处理函数，直接返回
         return NGX_DECLINED;
     }
 
@@ -149,9 +149,8 @@ ngx_http_rewrite_handler(ngx_http_request_t *r)
     if (e == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
-
-    e->sp = ngx_pcalloc(r->pool,
-                        rlcf->stack_size * sizeof(ngx_http_variable_value_t));
+	//下面的stack_size到底在哪里设置的/代码里面都找不到。
+    e->sp = ngx_pcalloc(r->pool,  rlcf->stack_size * sizeof(ngx_http_variable_value_t));
     if (e->sp == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
@@ -162,9 +161,9 @@ ngx_http_rewrite_handler(ngx_http_request_t *r)
     e->log = rlcf->log;
     e->status = NGX_DECLINED;
 
-    while (*(uintptr_t *) e->ip) {
+    while (*(uintptr_t *) e->ip) {//遍历每一个函数指针，分别调用他们。
         code = *(ngx_http_script_code_pt *) e->ip;
-        code(e);
+        code(e);//执行对应指令的函数，比如if等，
     }
 
     if (e->status == NGX_DECLINED) {

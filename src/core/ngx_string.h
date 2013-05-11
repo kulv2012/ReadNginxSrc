@@ -27,7 +27,7 @@ typedef struct {
 typedef struct {
     unsigned    len:28;
 
-    unsigned    valid:1;
+    unsigned    valid:1;//变量值是否设置过。
     unsigned    no_cacheable:1;
     unsigned    not_found:1;
     unsigned    escape:1;

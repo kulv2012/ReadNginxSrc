@@ -509,30 +509,21 @@ ngx_http_limit_conn(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     if (lzcf->shm_zone) {
         return "is duplicate";
     }
-
     value = cf->args->elts;
-
-    lzcf->shm_zone = ngx_shared_memory_add(cf, &value[1], 0,
-                                           &ngx_http_limit_zone_module);
+    lzcf->shm_zone = ngx_shared_memory_add(cf, &value[1], 0, &ngx_http_limit_zone_module);
     if (lzcf->shm_zone == NULL) {
         return NGX_CONF_ERROR;
     }
-
     n = ngx_atoi(value[2].data, value[2].len);
     if (n <= 0) {
-        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                           "invalid number of connections \"%V\"", &value[2]);
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,  "invalid number of connections \"%V\"", &value[2]);
         return NGX_CONF_ERROR;
     }
-
     if (n > 65535) {
-        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                           "connection limit must be less 65536");
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "connection limit must be less 65536");
         return NGX_CONF_ERROR;
     }
-
     lzcf->conn = n;
-
     return NGX_CONF_OK;
 }
 

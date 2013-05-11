@@ -10,7 +10,7 @@
 
 
 typedef struct {
-    ngx_str_t                name;
+    ngx_str_t                name;//index.htm的名字
     ngx_array_t             *lengths;
     ngx_array_t             *values;
 } ngx_http_index_t;
@@ -18,7 +18,7 @@ typedef struct {
 
 typedef struct {
     ngx_array_t             *indices;    /* array of ngx_http_index_t */
-    size_t                   max_index_len;
+    size_t                   max_index_len;//记录上面的indices数组中，文件名最长的是多少
 } ngx_http_index_loc_conf_t;
 
 
@@ -91,9 +91,7 @@ ngx_module_t  ngx_http_index_module = {
  * Unix has ENOTDIR error, however, it's less helpful than Win32's one:
  * it only indicates that path contains an usual file in place of directory.
  */
-
-static ngx_int_t
-ngx_http_index_handler(ngx_http_request_t *r)
+static ngx_int_t ngx_http_index_handler(ngx_http_request_t *r)
 {
     u_char                       *p, *name;
     size_t                        len, root, reserve, allocated;
@@ -108,14 +106,12 @@ ngx_http_index_handler(ngx_http_request_t *r)
     ngx_http_index_loc_conf_t    *ilcf;
     ngx_http_script_len_code_pt   lcode;
 
-    if (r->uri.data[r->uri.len - 1] != '/') {
+    if (r->uri.data[r->uri.len - 1] != '/') {//如果uri最后一个字符不是/，则没有必要做下面的事情了
         return NGX_DECLINED;
     }
-
     if (!(r->method & (NGX_HTTP_GET|NGX_HTTP_HEAD|NGX_HTTP_POST))) {
         return NGX_DECLINED;
     }
-
     ilcf = ngx_http_get_module_loc_conf(r, ngx_http_index_module);
     clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
 
@@ -126,56 +122,40 @@ ngx_http_index_handler(ngx_http_request_t *r)
     /* suppress MSVC warning */
     path.data = NULL;
 
-    index = ilcf->indices->elts;
+    index = ilcf->indices->elts;//遍历index_module的配置里面的indices index数组
     for (i = 0; i < ilcf->indices->nelts; i++) {
-
         if (index[i].lengths == NULL) {
-
             if (index[i].name.data[0] == '/') {
                 return ngx_http_internal_redirect(r, &index[i].name, &r->args);
             }
-
             reserve = ilcf->max_index_len;
             len = index[i].name.len;
 
         } else {
             ngx_memzero(&e, sizeof(ngx_http_script_engine_t));
-
             e.ip = index[i].lengths->elts;
             e.request = r;
             e.flushed = 1;
-
             /* 1 is for terminating '\0' as in static names */
             len = 1;
-
-            while (*(uintptr_t *) e.ip) {
+            while (*(uintptr_t *) e.ip) {//一个个调用脚本回调。
                 lcode = *(ngx_http_script_len_code_pt *) e.ip;
                 len += lcode(&e);
             }
-
             /* 16 bytes are preallocation */
-
             reserve = len + 16;
         }
-
         if (reserve > allocated) {
-
             name = ngx_http_map_uri_to_path(r, &path, &root, reserve);
             if (name == NULL) {
                 return NGX_ERROR;
             }
-
             allocated = path.data + path.len - name;
         }
-
         if (index[i].values == NULL) {
-
             /* index[i].name.len includes the terminating '\0' */
-
             ngx_memcpy(name, index[i].name.data, index[i].name.len);
-
             path.len = (name + index[i].name.len - 1) - path.data;
-
         } else {
             e.ip = index[i].values->elts;
             e.pos = name;
@@ -389,27 +369,22 @@ ngx_http_index_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
         conf->max_index_len = prev->max_index_len;
     }
 
-    if (conf->indices == NULL) {
+    if (conf->indices == NULL) {//如果配置文件没有指定index，则默认生成一个。
         conf->indices = ngx_array_create(cf->pool, 1, sizeof(ngx_http_index_t));
         if (conf->indices == NULL) {
             return NGX_CONF_ERROR;
         }
-
         index = ngx_array_push(conf->indices);
         if (index == NULL) {
             return NGX_CONF_ERROR;
         }
-
         index->name.len = sizeof(NGX_HTTP_DEFAULT_INDEX);
         index->name.data = (u_char *) NGX_HTTP_DEFAULT_INDEX;
         index->lengths = NULL;
         index->values = NULL;
-
         conf->max_index_len = sizeof(NGX_HTTP_DEFAULT_INDEX);
-
         return NGX_CONF_OK;
     }
-
     return NGX_CONF_OK;
 }
 
@@ -419,24 +394,19 @@ ngx_http_index_init(ngx_conf_t *cf)
 {
     ngx_http_handler_pt        *h;
     ngx_http_core_main_conf_t  *cmcf;
-
     cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
-
     h = ngx_array_push(&cmcf->phases[NGX_HTTP_CONTENT_PHASE].handlers);
     if (h == NULL) {
         return NGX_ERROR;
     }
-
-    *h = ngx_http_index_handler;
-
+    *h = ngx_http_index_handler;//设置为CONTENT_PHASE句柄。这样可以在http_core_run_phrase被调用。
     return NGX_OK;
 }
 
 
 /* TODO: warn about duplicate indices */
-
-static char *
-ngx_http_index_set_index(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+//index index.html index.php /index.php;
+static char * ngx_http_index_set_index(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
     ngx_http_index_loc_conf_t *ilcf = conf;
 
@@ -445,7 +415,7 @@ ngx_http_index_set_index(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     ngx_http_index_t           *index;
     ngx_http_script_compile_t   sc;
 
-    if (ilcf->indices == NULL) {
+    if (ilcf->indices == NULL) {//初始化index数组
         ilcf->indices = ngx_array_create(cf->pool, 2, sizeof(ngx_http_index_t));
         if (ilcf->indices == NULL) {
             return NGX_CONF_ERROR;
@@ -453,49 +423,36 @@ ngx_http_index_set_index(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     }
 
     value = cf->args->elts;
-
     for (i = 1; i < cf->args->nelts; i++) {
-
         if (value[i].data[0] == '/' && i != cf->args->nelts - 1) {
-            ngx_conf_log_error(NGX_LOG_WARN, cf, 0,
-                               "only the last index in \"index\" directive "
-                               "should be absolute");
+			//If the last entry begins with a /, and none of the earlier files are found, nginx will perform an internal redirect to this uri.
+            ngx_conf_log_error(NGX_LOG_WARN, cf, 0, "only the last index in \"index\" directive should be absolute");
         }
-
         if (value[i].len == 0) {
-            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                               "index \"%V\" in \"index\" directive is invalid",
-                               &value[1]);
+            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,"index \"%V\" in \"index\" directive is invalid", &value[1]);
             return NGX_CONF_ERROR;
         }
-
-        index = ngx_array_push(ilcf->indices);
+        index = ngx_array_push(ilcf->indices);//增加一个数组槽位
         if (index == NULL) {
             return NGX_CONF_ERROR;
         }
-
         index->name.len = value[i].len;
-        index->name.data = value[i].data;
+        index->name.data = value[i].data;//记住index.html
         index->lengths = NULL;
         index->values = NULL;
-
-        n = ngx_http_script_variables_count(&value[i]);
-
+        n = ngx_http_script_variables_count(&value[i]);//简单看看里面有几个变量，也就是有几个$字符
         if (n == 0) {
             if (ilcf->max_index_len < index->name.len) {
-                ilcf->max_index_len = index->name.len;
+                ilcf->max_index_len = index->name.len;//统计最长的文件名
             }
-
             if (index->name.data[0] == '/') {
                 continue;
             }
-
             /* include the terminating '\0' to the length to use ngx_memcpy() */
             index->name.len++;
-
-            continue;
+            continue;//下一个类型
         }
-
+		//下面说明有变量，需要进行变量处理。
         ngx_memzero(&sc, sizeof(ngx_http_script_compile_t));
 
         sc.cf = cf;

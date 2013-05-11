@@ -31,7 +31,7 @@ typedef struct {
     unsigned                    log:1;
 
     ngx_int_t                   status;
-    ngx_http_request_t         *request;
+    ngx_http_request_t         *request;//ËùÊôµÄÇëÇó
 } ngx_http_script_engine_t;
 
 

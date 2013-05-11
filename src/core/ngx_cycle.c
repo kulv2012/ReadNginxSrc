@@ -1098,62 +1098,48 @@ ngx_shared_memory_add(ngx_conf_t *cf, ngx_str_t *name, size_t size, void *tag)
 
     part = &cf->cycle->shared_memory.part;
     shm_zone = part->elts;
-
     for (i = 0; /* void */ ; i++) {
-
         if (i >= part->nelts) {
             if (part->next == NULL) {
-                break;
+                break;//没有了。
             }
-            part = part->next;
+            part = part->next;//指向下一块buffer，重新从0开始查找。
             shm_zone = part->elts;
             i = 0;
         }
-
         if (name->len != shm_zone[i].shm.name.len) {
             continue;
         }
-
-        if (ngx_strncmp(name->data, shm_zone[i].shm.name.data, name->len)
-            != 0)
-        {
+        if (ngx_strncmp(name->data, shm_zone[i].shm.name.data, name->len) != 0) {
             continue;
         }
-
-        if (size && size != shm_zone[i].shm.size) {
+        if (size && size != shm_zone[i].shm.size) {//名字相同，大小不一致，错误。
             ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                            "the size %uz of shared memory zone \"%V\" "
-                            "conflicts with already declared size %uz",
+                            "the size %uz of shared memory zone \"%V\" conflicts with already declared size %uz",
                             size, &shm_zone[i].shm.name, shm_zone[i].shm.size);
             return NULL;
         }
-
-        if (tag != shm_zone[i].tag) {
-            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                            "the shared memory zone \"%V\" is "
-                            "already declared for a different use",
-                            &shm_zone[i].shm.name);
+        if (tag != shm_zone[i].tag) {//tag不一致。这个是上层的数据，比如&ngx_http_limit_req_module
+            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "the shared memory zone \"%V\" is already declared for a different use", &shm_zone[i].shm.name);
             return NULL;
         }
-
-        return &shm_zone[i];
+        return &shm_zone[i];//找到了一个相同名字的，返回其在cf->cycle->shared_memory.part中的下标。
     }
 
-    shm_zone = ngx_list_push(&cf->cycle->shared_memory);
-
+    shm_zone = ngx_list_push(&cf->cycle->shared_memory);//没有找到已有名字的，因此新建一个。
     if (shm_zone == NULL) {
         return NULL;
     }
 
     shm_zone->data = NULL;
     shm_zone->shm.log = cf->cycle->log;
-    shm_zone->shm.size = size;
-    shm_zone->shm.name = *name;
+    shm_zone->shm.size = size;//该块共享内存的大小
+    shm_zone->shm.name = *name;//共享内存名字。
     shm_zone->shm.exists = 0;
     shm_zone->init = NULL;
-    shm_zone->tag = tag;
+    shm_zone->tag = tag;//用来做标志，比如为&ngx_http_limit_req_module
 
-    return shm_zone;
+    return shm_zone;//返回现在申请的新的shm_zone
 }
 
 

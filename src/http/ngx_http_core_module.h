@@ -103,30 +103,7 @@ typedef enum {
 
     NGX_HTTP_LOG_PHASE//日志。
 } ngx_http_phases;
-/* 上面的各个阶段默认情况下的句柄分别为:ngx_http_init_phase_handlers里面设置的
-ph[0].checker = ngx_http_core_generic_phase;  
-ph[0].handler = ngx_http_realip_init;  
-ph[1].checker = ngx_http_core_rewrite_phase;  
-ph[1].handler = ngx_http_rewrite_handler;  
-ph[2].checker = ngx_http_core_find_config_phase;
-ph[2].handler = NULL;  
-ph[3].checker = ngx_http_core_rewrite_phase;
-ph[3].handler = ngx_http_rewrite_handler;  
-ph[4].checker = ngx_http_core_post_rewrite_phase;
-ph[4].handler = NULL;  
-ph[5].checker = ngx_http_core_rewrite_phase;  
-ph[5].handler = ngx_http_realip_handler,ngx_http_limit_zone_handler，ngx_http_limit_req_handler,ngx_http_degradation_handler
-ph[6].checker = ngx_http_core_access_phase
-ph[6].handler = ngx_http_access_handler,ngx_http_auth_basic_handler
-ph[7].checker = ngx_http_core_post_access_phase
-ph[7].handler = NULL
-ph[8].checker = ngx_http_core_try_files_phase
-ph[8].handler = NULL
-ph[9].checker = ngx_http_core_content_phase
-ph[9].handler = ngx_http_static_handler,ngx_http_fastcgi_handler,ngx_http_index_handler,,,
-ph[10].checker = ngx_http_core_generic_phase
-ph[10].handler = ngx_http_log_handler
-*/
+//上面各个过程对应的处理函数在这里ngx_http_core_run_phases
 
 typedef struct ngx_http_phase_handler_s  ngx_http_phase_handler_t;
 
@@ -134,14 +111,15 @@ typedef ngx_int_t (*ngx_http_phase_handler_pt)(ngx_http_request_t *r,
     ngx_http_phase_handler_t *ph);
 
 struct ngx_http_phase_handler_s {
-    ngx_http_phase_handler_pt  checker;
-    ngx_http_handler_pt        handler;
+    ngx_http_phase_handler_pt  checker;//处理过程循环的入口函数，比如ngx_http_core_content_phase。
+    ngx_http_handler_pt        handler;//回调句柄，在postconfiguration设置的回调。
+    //下一个处理过程类型的数组下标，注意不是+1,而是指比如下一个过程大类型是NGX_HTTP_CONTENT_PHASE的下标。跳过同类型
     ngx_uint_t                 next;
 };
 
 
 typedef struct {
-    ngx_http_phase_handler_t  *handlers;//处理过程的句柄数组。
+    ngx_http_phase_handler_t  *handlers;//处理过程的句柄数组。数目等于phases[i].handlers里面的句柄数加上rewrite,try_files等。也就是每个函数一个
     ngx_uint_t                 server_rewrite_index;//标记一下，NGX_HTTP_SERVER_REWRITE_PHASE这个阶段的下标，或者说起始位置
     ngx_uint_t                 location_rewrite_index;
 } ngx_http_phase_engine_t;
@@ -154,7 +132,7 @@ typedef struct {
 
 typedef struct {
     ngx_array_t                servers;/* ngx_http_core_srv_conf_t *///每遇到一个server{},都会在这里记录一下。数量不一定等于server_name。
-    ngx_http_phase_engine_t    phase_engine;//NGINX处理过程结构，里面有句柄数组等。
+    ngx_http_phase_engine_t    phase_engine;//NGINX处理过程结构，里面有句柄数组等。ngx_http_init_phase_handlers设置这个。
     ngx_hash_t                 headers_in_hash;//预定义的著名HTTP头部的hash存储。在这里面:ngx_http_headers_in
     ngx_hash_t                 variables_hash;
     ngx_array_t                variables;       /* ngx_http_variable_t */
@@ -166,8 +144,9 @@ typedef struct {
 
     ngx_hash_keys_arrays_t    *variables_keys;
     ngx_array_t               *ports;//转为网络序后的端口列表。ngx_http_conf_port_t结构
-    ngx_uint_t                 try_files;       /* unsigned  try_files:1 */
+    ngx_uint_t                 try_files;       /* unsigned  try_files:1 *///是否配置了try_files指令
     ngx_http_phase_t           phases[NGX_HTTP_LOG_PHASE + 1];
+	//这是各个模块通过postconfiguration回调注册的处理过程。比如我关心XX过程的事件，我的回调在此。
 } ngx_http_core_main_conf_t;
 
 
@@ -331,7 +310,7 @@ struct ngx_http_core_loc_conf_s {
     uint32_t      limit_except;
     void        **limit_except_loc_conf;
 
-    ngx_http_handler_pt  handler;
+    ngx_http_handler_pt  handler;//对于fcgi，为ngx_http_fastcgi_handler
 
     /* location name length for inclusive location with inherited alias */
     size_t        alias;
@@ -370,7 +349,7 @@ struct ngx_http_core_loc_conf_s {
     time_t        keepalive_header;        /* keepalive_timeout */
 
     ngx_uint_t    keepalive_requests;      /* keepalive_requests */
-    ngx_uint_t    satisfy;                 /* satisfy */
+    ngx_uint_t    satisfy;                 /* satisfy *///对应于satisfy指令，用来做安全限制。
     ngx_uint_t    if_modified_since;       /* if_modified_since */
     ngx_uint_t    client_body_in_file_only; /* client_body_in_file_only */
 
@@ -443,7 +422,7 @@ typedef struct {
 struct ngx_http_location_tree_node_s {
     ngx_http_location_tree_node_t   *left;//字符串比较的前面部分，左右数目相等。
     ngx_http_location_tree_node_t   *right;
-    ngx_http_location_tree_node_t   *tree;//有相同前缀的字树。
+    ngx_http_location_tree_node_t   *tree;//有相同前缀的字树。代表该location的包含location结构
 
     ngx_http_core_loc_conf_t        *exact;
     ngx_http_core_loc_conf_t        *inclusive;//要进行包含匹配的。指向配置结构体。

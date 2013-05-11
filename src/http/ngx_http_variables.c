@@ -337,42 +337,29 @@ ngx_http_get_variable_index(ngx_conf_t *cf, ngx_str_t *name)
     ngx_http_core_main_conf_t  *cmcf;
 
     cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
-
     v = cmcf->variables.elts;
-
-    if (v == NULL) {
-        if (ngx_array_init(&cmcf->variables, cf->pool, 4,
-                           sizeof(ngx_http_variable_t))
-            != NGX_OK)
-        {
+    if (v == NULL) {//默认申请四个变量空间，为啥是4个呢
+        if (ngx_array_init(&cmcf->variables, cf->pool, 4, sizeof(ngx_http_variable_t)) != NGX_OK) {
             return NGX_ERROR;
         }
-
     } else {
-        for (i = 0; i < cmcf->variables.nelts; i++) {
-            if (name->len != v[i].name.len
-                || ngx_strncasecmp(name->data, v[i].name.data, name->len) != 0)
-            {
+        for (i = 0; i < cmcf->variables.nelts; i++) {//如果cmcf->variables.elts已存在，则根据名字查找，如果找到就返回下标，否则添加一个。
+            if (name->len != v[i].name.len || ngx_strncasecmp(name->data, v[i].name.data, name->len) != 0)  {
                 continue;
             }
-
             return i;
         }
     }
-
     v = ngx_array_push(&cmcf->variables);
     if (v == NULL) {
         return NGX_ERROR;
     }
-
     v->name.len = name->len;
     v->name.data = ngx_pnalloc(cf->pool, name->len);
     if (v->name.data == NULL) {
         return NGX_ERROR;
     }
-
     ngx_strlow(v->name.data, name->data, name->len);
-
     v->set_handler = NULL;
     v->get_handler = NULL;
     v->data = 0;
@@ -390,26 +377,20 @@ ngx_http_get_indexed_variable(ngx_http_request_t *r, ngx_uint_t index)
     ngx_http_core_main_conf_t  *cmcf;
 
     cmcf = ngx_http_get_module_main_conf(r, ngx_http_core_module);
-
     if (cmcf->variables.nelts <= index) {
-        ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0,
-                      "unknown variable index: %d", index);
+        ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0, "unknown variable index: %d", index);
         return NULL;
     }
-
-    if (r->variables[index].not_found || r->variables[index].valid) {
+    if (r->variables[index].not_found || r->variables[index].valid) {//已经获取过一次了。
         return &r->variables[index];
     }
-
     v = cmcf->variables.elts;
-
-    if (v[index].get_handler(r, &r->variables[index], v[index].data)
-        == NGX_OK)
-    {
+	//调用这个变量的get_handler句柄，从而得到其值。handler为ngx_http_variable_argument或者ngx_http_variable_cookie等。
+	//这些handler里面会将valid设置为1的，也就是调用一次就OK了。
+    if (v[index].get_handler(r, &r->variables[index], v[index].data) == NGX_OK) {
         if (v[index].flags & NGX_HTTP_VAR_NOCACHEABLE) {
             r->variables[index].no_cacheable = 1;
         }
-
         return &r->variables[index];
     }
 
@@ -424,18 +405,14 @@ ngx_http_variable_value_t *
 ngx_http_get_flushed_variable(ngx_http_request_t *r, ngx_uint_t index)
 {
     ngx_http_variable_value_t  *v;
-
     v = &r->variables[index];
-
     if (v->valid) {
         if (!v->no_cacheable) {
             return v;
         }
-
         v->valid = 0;
         v->not_found = 0;
     }
-
     return ngx_http_get_indexed_variable(r, index);
 }
 
@@ -506,25 +483,18 @@ ngx_http_get_variable(ngx_http_request_t *r, ngx_str_t *name, ngx_uint_t key)
     }
 
     if (ngx_strncmp(name->data, "cookie_", 7) == 0) {
-
         if (ngx_http_variable_cookie(r, vv, (uintptr_t) name) == NGX_OK) {
             return vv;
         }
-
         return NULL;
     }
-
     if (ngx_strncmp(name->data, "arg_", 4) == 0) {
-
         if (ngx_http_variable_argument(r, vv, (uintptr_t) name) == NGX_OK) {
             return vv;
         }
-
         return NULL;
     }
-
     vv->not_found = 1;
-
     return vv;
 }
 
@@ -552,27 +522,20 @@ ngx_http_variable_request(ngx_http_request_t *r, ngx_http_variable_value_t *v,
 }
 
 
-static void
-ngx_http_variable_request_set(ngx_http_request_t *r,
-    ngx_http_variable_value_t *v, uintptr_t data)
+static void ngx_http_variable_request_set(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
 {
     ngx_str_t  *s;
-
     s = (ngx_str_t *) ((char *) r + data);
-
     s->len = v->len;
     s->data = v->data;
 }
 
 
 static ngx_int_t
-ngx_http_variable_request_get_size(ngx_http_request_t *r,
-    ngx_http_variable_value_t *v, uintptr_t data)
+ngx_http_variable_request_get_size(ngx_http_request_t *r,ngx_http_variable_value_t *v, uintptr_t data)
 {
     size_t  *sp;
-
     sp = (size_t *) ((char *) r + data);
-
     v->data = ngx_pnalloc(r->pool, NGX_SIZE_T_LEN);
     if (v->data == NULL) {
         return NGX_ERROR;
@@ -598,17 +561,12 @@ ngx_http_variable_request_set_size(ngx_http_request_t *r,
     val.data = v->data;
 
     s = ngx_parse_size(&val);
-
     if (s == NGX_ERROR) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "invalid size \"%V\"", &val);
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "invalid size \"%V\"", &val);
         return;
     }
-
     sp = (ssize_t *) ((char *) r + data);
-
     *sp = s;
-
     return;
 }
 
