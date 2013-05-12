@@ -277,6 +277,7 @@ static char * ngx_http_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             }
         }
     }
+	//初始化变量系统里面著名的头部字段。
     if (ngx_http_variables_init_vars(cf) != NGX_OK) {
         return NGX_CONF_ERROR;
     }
@@ -286,6 +287,7 @@ static char * ngx_http_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
      */
 
     *cf = pcf;
+	//初始化过程处理数组，将他们展开。
     if (ngx_http_init_phase_handlers(cf, cmcf) != NGX_OK) {
         return NGX_CONF_ERROR;
     }
@@ -689,7 +691,7 @@ ngx_http_init_static_location_trees(ngx_conf_t *cf, ngx_http_core_loc_conf_t *pc
 
 ngx_int_t
 ngx_http_add_location(ngx_conf_t *cf, ngx_queue_t **locations,  ngx_http_core_loc_conf_t *clcf)
-{//将clcf所指的位置配置链接到locations的后面，插入后面。
+{//将clcf所指的位置配置链接到locations的后面，插入后面。也就是增加一个location
 //clcf为location的ctx->loc_conf数组。
     ngx_http_location_queue_t  *lq;
     if (*locations == NULL) {//如果还没有初始化，就创建locations数组

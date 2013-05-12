@@ -11,8 +11,8 @@
 
 typedef struct {
     ngx_str_t                name;//index.htm的名字
-    ngx_array_t             *lengths;
-    ngx_array_t             *values;
+    ngx_array_t             *lengths;//如果为空，表示没有变量，纯字符串。否则
+    ngx_array_t             *values;//同上。
 } ngx_http_index_t;
 
 
@@ -125,12 +125,11 @@ static ngx_int_t ngx_http_index_handler(ngx_http_request_t *r)
     index = ilcf->indices->elts;//遍历index_module的配置里面的indices index数组
     for (i = 0; i < ilcf->indices->nelts; i++) {
         if (index[i].lengths == NULL) {
-            if (index[i].name.data[0] == '/') {
+            if (index[i].name.data[0] == '/') {//如果是从根目录开始，那又需要做一次内部重定向了。
                 return ngx_http_internal_redirect(r, &index[i].name, &r->args);
             }
-            reserve = ilcf->max_index_len;
-            len = index[i].name.len;
-
+            reserve = ilcf->max_index_len;//记录最长的index名字
+            len = index[i].name.len;//当前这个最长的名字长度
         } else {
             ngx_memzero(&e, sizeof(ngx_http_script_engine_t));
             e.ip = index[i].lengths->elts;
@@ -176,9 +175,7 @@ static ngx_int_t ngx_http_index_handler(ngx_http_request_t *r)
             *e.pos = '\0';
         }
 
-        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                       "open index \"%V\"", &path);
-
+        ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,  "open index \"%V\"", &path);
         ngx_memzero(&of, sizeof(ngx_open_file_info_t));
 
         of.read_ahead = clcf->read_ahead;
@@ -189,54 +186,36 @@ static ngx_int_t ngx_http_index_handler(ngx_http_request_t *r)
         of.errors = clcf->open_file_cache_errors;
         of.events = clcf->open_file_cache_events;
 
-        if (ngx_open_cached_file(clcf->open_file_cache, &path, &of, r->pool)
-            != NGX_OK)
-        {
-            ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, of.err,
-                           "%s \"%s\" failed", of.failed, path.data);
-
+        if (ngx_open_cached_file(clcf->open_file_cache, &path, &of, r->pool) != NGX_OK) {
+            ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, of.err, "%s \"%s\" failed", of.failed, path.data);
             if (of.err == 0) {
                 return NGX_HTTP_INTERNAL_SERVER_ERROR;
             }
-
-            if (of.err == NGX_ENOTDIR
-                || of.err == NGX_ENAMETOOLONG
-                || of.err == NGX_EACCES)
-            {
+            if (of.err == NGX_ENOTDIR|| of.err == NGX_ENAMETOOLONG || of.err == NGX_EACCES){
                 return ngx_http_index_error(r, clcf, path.data, of.err);
             }
-
             if (!dir_tested) {
                 rc = ngx_http_index_test_dir(r, clcf, path.data, name - 1);
-
                 if (rc != NGX_OK) {
                     return rc;
                 }
-
                 dir_tested = 1;
             }
-
             if (of.err == NGX_ENOENT) {
                 continue;
             }
-
-            ngx_log_error(NGX_LOG_CRIT, r->connection->log, of.err,
-                          "%s \"%s\" failed", of.failed, path.data);
-
+            ngx_log_error(NGX_LOG_CRIT, r->connection->log, of.err, "%s \"%s\" failed", of.failed, path.data);
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
 
         uri.len = r->uri.len + len - 1;
-
         if (!clcf->alias) {
             uri.data = path.data + root;
-
         } else {
             uri.data = ngx_pnalloc(r->pool, uri.len);
             if (uri.data == NULL) {
                 return NGX_HTTP_INTERNAL_SERVER_ERROR;
             }
-
             p = ngx_copy(uri.data, r->uri.data, r->uri.len);
             ngx_memcpy(p, name, len - 1);
         }
@@ -409,13 +388,12 @@ ngx_http_index_init(ngx_conf_t *cf)
 static char * ngx_http_index_set_index(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
     ngx_http_index_loc_conf_t *ilcf = conf;
-
     ngx_str_t                  *value;
     ngx_uint_t                  i, n;
     ngx_http_index_t           *index;
     ngx_http_script_compile_t   sc;
 
-    if (ilcf->indices == NULL) {//初始化index数组
+    if (ilcf->indices == NULL) {//初始化index数组,数量2个
         ilcf->indices = ngx_array_create(cf->pool, 2, sizeof(ngx_http_index_t));
         if (ilcf->indices == NULL) {
             return NGX_CONF_ERROR;
@@ -459,7 +437,7 @@ static char * ngx_http_index_set_index(ngx_conf_t *cf, ngx_command_t *cmd, void 
         sc.source = &value[i];
         sc.lengths = &index->lengths;
         sc.values = &index->values;
-        sc.variables = n;
+        sc.variables = n;//有几个变量
         sc.complete_lengths = 1;
         sc.complete_values = 1;
 

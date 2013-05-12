@@ -15,11 +15,19 @@
 
 typedef struct {
     u_char                     *ip;
-    u_char                     *pos;
-    ngx_http_variable_value_t  *sp;
+	/*关于pos && code: 每次调用code,都会将解析到的新的字符串放入pos指向的字符串处，
+	然后将pos向后移动，下次进入的时候，会自动将数据追加到后面的。
+	对于ip也是这个原理，code里面会将e->ip向后移动。移动的大小根据不同的变量类型相关。
+	ip指向一快内存，其内容为变量相关的一个结构体，比如ngx_http_script_copy_capture_code_t，
+	结构体之后，又是下一个ip的地址。比如移动时是这样的 :
+	code = (ngx_http_script_copy_capture_code_t *) e->ip;
+    e->ip += sizeof(ngx_http_script_copy_capture_code_t);//移动这么多位移。
+	*/ 
+    u_char                     *pos;//pos之前的数据就是解析成功的，后面的数据将追加到pos后面。
+    ngx_http_variable_value_t  *sp;//这里貌似是用sp来保存中间结果，比如保存当前这一步的进度，到下一步好用e->sp--来找到上一步的结果。
 
-    ngx_str_t                   buf;
-    ngx_str_t                   line;
+    ngx_str_t                   buf;//存放结果，也就是buffer，pos指向其中。
+    ngx_str_t                   line;//记录请求行URI  e->line = r->uri;
 
     /* the start of the rewritten arguments */
     u_char                     *args;
@@ -37,14 +45,14 @@ typedef struct {
 
 typedef struct {
     ngx_conf_t                 *cf;
-    ngx_str_t                  *source;
+    ngx_str_t                  *source;//指向字符串，比如http://$http_host/aa.mp4
 
     ngx_array_t               **flushes;
-    ngx_array_t               **lengths;
+    ngx_array_t               **lengths;//指向外部的编译结果数组&index->lengths;等
     ngx_array_t               **values;
 
-    ngx_uint_t                  variables;
-    ngx_uint_t                  ncaptures;
+    ngx_uint_t                  variables;//source指向的字符串中有几个变量
+    ngx_uint_t                  ncaptures;//最大的一个$3 的数字
     ngx_uint_t                  captures_mask;
     ngx_uint_t                  size;
 
@@ -63,7 +71,7 @@ typedef struct {
 
 
 typedef struct {
-    ngx_str_t                   value;
+    ngx_str_t                   value;//要解析的字符串。
     ngx_uint_t                 *flushes;
     void                       *lengths;
     void                       *values;
@@ -72,7 +80,7 @@ typedef struct {
 
 typedef struct {
     ngx_conf_t                 *cf;
-    ngx_str_t                  *value;
+    ngx_str_t                  *value;//后面的参数字符串，要解析的字符串。
     ngx_http_complex_value_t   *complex_value;
 
     unsigned                    zero:1;
@@ -93,7 +101,7 @@ typedef struct {
 
 typedef struct {
     ngx_http_script_code_pt     code;
-    uintptr_t                   index;
+    uintptr_t                   index;//变量在cmcf->variables中的下标
 } ngx_http_script_var_code_t;
 
 
@@ -106,30 +114,32 @@ typedef struct {
 
 typedef struct {
     ngx_http_script_code_pt     code;
-    uintptr_t                   n;
+    uintptr_t                   n;//第几个capture，翻倍了的值。就是数字$1,$2,用来寻找r->captures里面的下标，已2为单位。
 } ngx_http_script_copy_capture_code_t;
 
 
 #if (NGX_PCRE)
 
 typedef struct {
-    ngx_http_script_code_pt     code;
-    ngx_http_regex_t           *regex;
-    ngx_array_t                *lengths;
+    ngx_http_script_code_pt     code;//当前的code，第一个函数，为ngx_http_script_regex_start_code
+    ngx_http_regex_t           *regex;//解析后的正则表达式。
+    ngx_array_t                *lengths;//我这个正则表达式对应的lengths。依靠它来解析 第二部分 rewrite ^(.*)$ http://$http_host.mp4 break;
+    									//lengths里面包含一系列code,用来求目标url的大小的。
     uintptr_t                   size;
     uintptr_t                   status;
-    uintptr_t                   next;
+    uintptr_t                   next;//next的含义为;如果当前code匹配失败，那么下一个code的位移是在什么地方，这些东西全部放在一个数组里面的。
 
-    uintptr_t                   test:1;
+    uintptr_t                   test:1;//我是要看看是否正则匹配成功，你待会匹配的时候记得放个变量到堆栈里。
     uintptr_t                   negative_test:1;
-    uintptr_t                   uri:1;
+    uintptr_t                   uri:1;//是否是URI匹配。
     uintptr_t                   args:1;
 
     /* add the r->args to the new arguments */
-    uintptr_t                   add_args:1;
+    uintptr_t                   add_args:1;//是否自动追加参数到rewrite后面。如果目标结果串后面用问好结尾，则nginx不会拷贝参数到后面的
 
-    uintptr_t                   redirect:1;
+    uintptr_t                   redirect:1;//nginx判断，如果是用http://等开头的rewrite，就代表是垮域重定向。会做302处理。
     uintptr_t                   break_cycle:1;
+	//rewrite最后的参数是break，将rewrite后的地址在当前location标签中执行。具体参考ngx_http_script_regex_start_code
 
     ngx_str_t                   name;
 } ngx_http_script_regex_code_t;
@@ -158,8 +168,8 @@ typedef struct {
 
 typedef struct {
     ngx_http_script_code_pt     code;
-    uintptr_t                   status;
-    ngx_http_complex_value_t    text;
+    uintptr_t                   status;//返回的状态码。return code [ text ]
+    ngx_http_complex_value_t    text;//ccv.complex_value = &ret->text;后面的参数的脚本引擎地址。
 } ngx_http_script_return_code_t;
 
 
@@ -184,21 +194,21 @@ typedef struct {
 typedef struct {
     ngx_http_script_code_pt     code;
     uintptr_t                   next;
-    void                      **loc_conf;
+    void                      **loc_conf;//新的location配置。
 } ngx_http_script_if_code_t;
 
 
 typedef struct {
-    ngx_http_script_code_pt     code;
-    ngx_array_t                *lengths;
+    ngx_http_script_code_pt     code;//ngx_http_script_complex_value_code
+    ngx_array_t                *lengths;//复杂指令里面嵌套了其他code
 } ngx_http_script_complex_value_code_t;
 
 
 typedef struct {
-    ngx_http_script_code_pt     code;
-    uintptr_t                   value;
-    uintptr_t                   text_len;
-    uintptr_t                   text_data;
+    ngx_http_script_code_pt     code;//可以为ngx_http_script_value_code
+    uintptr_t                   value;//数字大小，或者如果text_data不是数字串，就为0.
+    uintptr_t                   text_len;//简单字符串的长度。
+    uintptr_t                   text_data;//记录字符串地址value->data;
 } ngx_http_script_value_code_t;
 
 

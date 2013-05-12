@@ -3431,18 +3431,13 @@ ngx_http_upstream_response_length_variable(ngx_http_request_t *r,
 }
 
 
-ngx_int_t
-ngx_http_upstream_header_variable(ngx_http_request_t *r,
-    ngx_http_variable_value_t *v, uintptr_t data)
-{
+ngx_int_t ngx_http_upstream_header_variable(ngx_http_request_t *r, ngx_http_variable_value_t *v, uintptr_t data)
+{//获取非著名的头部字段。
     if (r->upstream == NULL) {
         v->not_found = 1;
         return NGX_OK;
     }
-
-    return ngx_http_variable_unknown_header(v, (ngx_str_t *) data,
-                                         &r->upstream->headers_in.headers.part,
-                                         sizeof("upstream_http_") - 1);
+    return ngx_http_variable_unknown_header(v, (ngx_str_t *) data, &r->upstream->headers_in.headers.part, sizeof("upstream_http_") - 1);
 }
 
 

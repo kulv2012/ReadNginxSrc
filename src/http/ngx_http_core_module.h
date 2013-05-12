@@ -135,14 +135,14 @@ typedef struct {
     ngx_http_phase_engine_t    phase_engine;//NGINX处理过程结构，里面有句柄数组等。ngx_http_init_phase_handlers设置这个。
     ngx_hash_t                 headers_in_hash;//预定义的著名HTTP头部的hash存储。在这里面:ngx_http_headers_in
     ngx_hash_t                 variables_hash;
-    ngx_array_t                variables;       /* ngx_http_variable_t */
-    ngx_uint_t                 ncaptures;
+    ngx_array_t                variables;/* ngx_http_variable_t *///配置中出现的变量(在处理请求时会用到的)，会放到cmcf->variables中。
+    ngx_uint_t                 ncaptures;//这个main_conf里面，所有正则表达式中，含有$2,$3变量做多的是多少。
     ngx_uint_t                 server_names_hash_max_size;
     ngx_uint_t                 server_names_hash_bucket_size;
     ngx_uint_t                 variables_hash_max_size;
     ngx_uint_t                 variables_hash_bucket_size;
 
-    ngx_hash_keys_arrays_t    *variables_keys;
+    ngx_hash_keys_arrays_t    *variables_keys;//保存了系统中所有预定义，自定义等所有变量，出了"http_"前缀的，参考ngx_http_variables_init_vars
     ngx_array_t               *ports;//转为网络序后的端口列表。ngx_http_conf_port_t结构
     ngx_uint_t                 try_files;       /* unsigned  try_files:1 *///是否配置了try_files指令
     ngx_http_phase_t           phases[NGX_HTTP_LOG_PHASE + 1];

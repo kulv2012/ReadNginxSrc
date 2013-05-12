@@ -28,8 +28,8 @@ typedef struct {
     unsigned    len:28;
 
     unsigned    valid:1;//变量值是否设置过。
-    unsigned    no_cacheable:1;
-    unsigned    not_found:1;
+    unsigned    no_cacheable:1;//是否可以缓存变量的值，是否需要每次重新计算值
+    unsigned    not_found:1;//在数组中是否有效。
     unsigned    escape:1;
 
     u_char     *data;
@@ -115,14 +115,11 @@ static ngx_inline u_char *
 ngx_copy(u_char *dst, u_char *src, size_t len)
 {
     if (len < 17) {
-
         while (len) {
             *dst++ = *src++;
             len--;
         }
-
         return dst;
-
     } else {
         return ngx_cpymem(dst, src, len);
     }

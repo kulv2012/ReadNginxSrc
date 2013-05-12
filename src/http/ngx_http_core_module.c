@@ -1634,75 +1634,65 @@ ngx_http_set_exten(ngx_http_request_t *r)
 
 
 ngx_int_t
-ngx_http_send_response(ngx_http_request_t *r, ngx_uint_t status,
-    ngx_str_t *ct, ngx_http_complex_value_t *cv)
-{
+ngx_http_send_response(ngx_http_request_t *r, ngx_uint_t status,  ngx_str_t *ct, ngx_http_complex_value_t *cv)
+{//根据复杂表达式获取其值，然后确定是重定向还是要发送响应，将头部数据和body数据发送给客户端。
     ngx_int_t     rc;
     ngx_str_t     val;
     ngx_buf_t    *b;
     ngx_chain_t   out;
 
     r->headers_out.status = status;
-
     if (status == NGX_HTTP_NO_CONTENT) {
         r->header_only = 1;
         return ngx_http_send_header(r);
     }
-
+	//根据val复杂表达式结构，获取其代表的目标值，存入value.
     if (ngx_http_complex_value(r, cv, &val) != NGX_OK) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
-
     if (status >= NGX_HTTP_MOVED_PERMANENTLY && status <= NGX_HTTP_SEE_OTHER) {
-
+		//重定向，val上就是目标URL吧。
         r->headers_out.location = ngx_list_push(&r->headers_out.headers);
         if (r->headers_out.location == NULL) {
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
-
         r->headers_out.location->hash = 1;
         ngx_str_set(&r->headers_out.location->key, "Location");
         r->headers_out.location->value = val;
-
         return status;
     }
-
+	//不是重定向，肿么办，这个事一坨数据，要echo 回去的。
     r->headers_out.content_length_n = val.len;
-
     if (ct) {
         r->headers_out.content_type_len = ct->len;
         r->headers_out.content_type = *ct;
-
     } else {
         if (ngx_http_set_content_type(r) != NGX_OK) {
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
     }
-
     if (r->method == NGX_HTTP_HEAD || (r != r->main && val.len == 0)) {
-        return ngx_http_send_header(r);
+        return ngx_http_send_header(r);//客户端只要header,那么就发送head吧
     }
 
     b = ngx_pcalloc(r->pool, sizeof(ngx_buf_t));
     if (b == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
-
-    b->pos = val.data;
+	//要发送数据，所以得逐步相关的结构了，输出buf
+    b->pos = val.data;//要输出的内容。
     b->last = val.data + val.len;
     b->memory = val.len ? 1 : 0;
     b->last_buf = (r == r->main) ? 1 : 0;
     b->last_in_chain = 1;
-
-    out.buf = b;
+    out.buf = b;//就一坨数据，一块就够了。因此这个链表只有一个节点。
     out.next = NULL;
-
-    rc = ngx_http_send_header(r);
+    rc = ngx_http_send_header(r);//发视头部数据。
 
     if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
         return rc;
     }
-
+	//BODY发送函数，调用ngx_http_top_body_filter一个个将他们发送出去
     return ngx_http_output_filter(r, &out);
 }
 
@@ -1740,78 +1730,54 @@ ngx_http_output_filter(ngx_http_request_t *r, ngx_chain_t *in)
 
 
 u_char *
-ngx_http_map_uri_to_path(ngx_http_request_t *r, ngx_str_t *path,
-    size_t *root_length, size_t reserved)
+ngx_http_map_uri_to_path(ngx_http_request_t *r, ngx_str_t *path, size_t *root_length, size_t reserved)
 {
     u_char                    *last;
     size_t                     alias;
     ngx_http_core_loc_conf_t  *clcf;
 
     clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
-
     alias = clcf->alias;
-
     if (alias && !r->valid_location) {
-        ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0,
-                      "\"alias\" could not be used in location \"%V\" "
-                      "where URI was rewritten", &clcf->name);
+        ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0, "\"alias\" could not be used in location \"%V\" where URI was rewritten", &clcf->name);
         return NULL;
     }
-
     if (clcf->root_lengths == NULL) {
-
-        *root_length = clcf->root.len;
-
+        *root_length = clcf->root.len;//设置好root 目录的长度
         path->len = clcf->root.len + reserved + r->uri.len - alias + 1;
-
         path->data = ngx_pnalloc(r->pool, path->len);
         if (path->data == NULL) {
             return NULL;
         }
-
-        last = ngx_copy(path->data, clcf->root.data, clcf->root.len);
-
+        last = ngx_copy(path->data, clcf->root.data, clcf->root.len);//拷贝前面的路径根部分
     } else {
-
 #if (NGX_PCRE)
         ngx_uint_t  captures;
-
         captures = alias && clcf->regex;
-
-        reserved += captures ? r->add_uri_to_alias ? r->uri.len + 1 : 1
-                             : r->uri.len - alias + 1;
+        reserved += captures ? (r->add_uri_to_alias ? r->uri.len + 1 : 1) : r->uri.len - alias + 1;
 #else
         reserved += r->uri.len - alias + 1;
 #endif
-
-        if (ngx_http_script_run(r, path, clcf->root_lengths->elts, reserved,
-                                clcf->root_values->elts)
-            == NULL)
-        {
+		//编译一下这些变量，计算其值。
+        if (ngx_http_script_run(r, path, clcf->root_lengths->elts, reserved,  clcf->root_values->elts) == NULL) {
             return NULL;
         }
-
         if (ngx_conf_full_name((ngx_cycle_t *) ngx_cycle, path, 0) != NGX_OK) {
-            return NULL;
+            return NULL;//将name参数转为绝对路径。
         }
-
         *root_length = path->len - reserved;
         last = path->data + *root_length;
-
 #if (NGX_PCRE)
         if (captures) {
             if (!r->add_uri_to_alias) {
                 *last = '\0';
                 return last;
             }
-
             alias = 0;
         }
 #endif
     }
-
     last = ngx_cpystrn(last, r->uri.data + alias, r->uri.len - alias + 1);
-
     return last;
 }
 
@@ -2655,7 +2621,7 @@ ngx_http_core_type(ngx_conf_t *cf, ngx_command_t *dummy, void *conf)
 
 static ngx_int_t
 ngx_http_core_preconfiguration(ngx_conf_t *cf)
-{
+{//导入核心的一些变量，在解析配置之前就设置了
     return ngx_http_variables_add_core_vars(cf);
 }
 

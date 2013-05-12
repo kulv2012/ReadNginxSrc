@@ -61,77 +61,55 @@ ngx_regex_malloc_done(void)
 
 ngx_int_t
 ngx_regex_compile(ngx_regex_compile_t *rc)
-{
+{//调用pcre_compile编译正则表达。返回结果存在rc->regex = re;
     int           n, erroff;
     char         *p;
     const char   *errstr;
     ngx_regex_t  *re;
 
     ngx_regex_malloc_init(rc->pool);
-
-    re = pcre_compile((const char *) rc->pattern.data, (int) rc->options,
-                      &errstr, &erroff, NULL);
-
+    re = pcre_compile((const char *) rc->pattern.data, (int) rc->options,  &errstr, &erroff, NULL);
     /* ensure that there is no current pool */
     ngx_regex_malloc_done();
-
     if (re == NULL) {
         if ((size_t) erroff == rc->pattern.len) {
-           rc->err.len = ngx_snprintf(rc->err.data, rc->err.len,
-                              "pcre_compile() failed: %s in \"%V\"",
-                               errstr, &rc->pattern)
-                      - rc->err.data;
-
+           rc->err.len = ngx_snprintf(rc->err.data, rc->err.len,  "pcre_compile() failed: %s in \"%V\"", errstr, &rc->pattern) - rc->err.data;
         } else {
            rc->err.len = ngx_snprintf(rc->err.data, rc->err.len,
-                              "pcre_compile() failed: %s in \"%V\" at \"%s\"",
-                               errstr, &rc->pattern, rc->pattern.data + erroff)
-                      - rc->err.data;
+                              "pcre_compile() failed: %s in \"%V\" at \"%s\"", errstr, &rc->pattern, rc->pattern.data + erroff)- rc->err.data;
         }
-
         return NGX_ERROR;
     }
-
     rc->regex = re;
-
-    n = pcre_fullinfo(re, NULL, PCRE_INFO_CAPTURECOUNT, &rc->captures);
+    n = pcre_fullinfo(re, NULL, PCRE_INFO_CAPTURECOUNT, &rc->captures);//获取$1,$2有多少个。
     if (n < 0) {
         p = "pcre_fullinfo(\"%V\", PCRE_INFO_CAPTURECOUNT) failed: %d";
         goto failed;
     }
-
     if (rc->captures == 0) {
         return NGX_OK;
     }
-
     n = pcre_fullinfo(re, NULL, PCRE_INFO_NAMECOUNT, &rc->named_captures);
     if (n < 0) {
         p = "pcre_fullinfo(\"%V\", PCRE_INFO_NAMECOUNT) failed: %d";
         goto failed;
     }
-
     if (rc->named_captures == 0) {
         return NGX_OK;
     }
-
     n = pcre_fullinfo(re, NULL, PCRE_INFO_NAMEENTRYSIZE, &rc->name_size);
     if (n < 0) {
         p = "pcre_fullinfo(\"%V\", PCRE_INFO_NAMEENTRYSIZE) failed: %d";
         goto failed;
     }
-
     n = pcre_fullinfo(re, NULL, PCRE_INFO_NAMETABLE, &rc->names);
     if (n < 0) {
         p = "pcre_fullinfo(\"%V\", PCRE_INFO_NAMETABLE) failed: %d";
         goto failed;
     }
-
     return NGX_OK;
-
 failed:
-
-    rc->err.len = ngx_snprintf(rc->err.data, rc->err.len, p, &rc->pattern, n)
-                  - rc->err.data;
+    rc->err.len = ngx_snprintf(rc->err.data, rc->err.len, p, &rc->pattern, n)  - rc->err.data;
     return NGX_OK;
 }
 

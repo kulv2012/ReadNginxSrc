@@ -26,11 +26,11 @@ typedef struct {
     ngx_pool_t   *pool;
     ngx_int_t     options;
 
-    ngx_regex_t  *regex;
+    ngx_regex_t  *regex;//pcre_compile返回的结果
     int           captures;
-    int           named_captures;
-    int           name_size;
-    u_char       *names;
+    int           named_captures;//命名的正则表达式子模式，只有这种才会出现在cmcf->variables里面
+    int           name_size;//一个命名子模式的二维表存储在p的位置。每一行是一个命名模式，每行的字节数为name_size
+    u_char       *names;//
     ngx_str_t     err;
 } ngx_regex_compile_t;
 

@@ -1,24 +1,7 @@
----- shm_zone->data Matches (23 in 5 files) ----
-Ngx_cycle.c (h:\dropbox\github\readnginxsrc\src\core):    shm_zone->data = NULL;
-Ngx_event_openssl.c (h:\dropbox\github\readnginxsrc\src\event):        shm_zone->data = data;
-Ngx_event_openssl.c (h:\dropbox\github\readnginxsrc\src\event):        shm_zone->data = data;
-Ngx_event_openssl.c (h:\dropbox\github\readnginxsrc\src\event):    shm_zone->data = cache;
-Ngx_event_openssl.c (h:\dropbox\github\readnginxsrc\src\event):    cache = shm_zone->data;
-Ngx_event_openssl.c (h:\dropbox\github\readnginxsrc\src\event):    cache = shm_zone->data;
-Ngx_event_openssl.c (h:\dropbox\github\readnginxsrc\src\event):    cache = shm_zone->data;
-Ngx_http_file_cache.c (h:\dropbox\github\readnginxsrc\src\http):    cache = shm_zone->data;
-Ngx_http_file_cache.c (h:\dropbox\github\readnginxsrc\src\http):    if (cache->shm_zone->data) {
-Ngx_http_file_cache.c (h:\dropbox\github\readnginxsrc\src\http):    cache->shm_zone->data = cache;
-Ngx_http_limit_req_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):    ctx = lrcf->shm_zone->data;//data为ngx_http_limit_req_zone设置的ngx_http_limit_req_ctx_t接口，里面记录了这个session的名字，大小等。
-Ngx_http_limit_req_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):    ctx = lrcf->shm_zone->data;
-Ngx_http_limit_req_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):    ctx = shm_zone->data;
-Ngx_http_limit_req_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):    if (shm_zone->data) {
-Ngx_http_limit_req_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):        ctx = shm_zone->data;
-Ngx_http_limit_req_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):    shm_zone->data = ctx;//记录刚申请准备的ctx，里面记录了rate,index,var等信息。
-Ngx_http_limit_req_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):    if (lrcf->shm_zone->data == NULL) {
-Ngx_http_limit_zone_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):    ctx = lzcf->shm_zone->data;
-Ngx_http_limit_zone_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):    ctx = lzcln->shm_zone->data;
-Ngx_http_limit_zone_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):    ctx = shm_zone->data;
-Ngx_http_limit_zone_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):    if (shm_zone->data) {
-Ngx_http_limit_zone_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):        ctx = shm_zone->data;
-Ngx_http_limit_zone_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):    shm_zone->data = ctx;
+---- ngx_http_regex_compile Matches (6 in 4 files) ----
+Ngx_http_core_module.c (h:\dropbox\github\readnginxsrc\src\http):    clcf->regex = ngx_http_regex_compile(cf, &rc);
+Ngx_http_core_module.c (h:\dropbox\github\readnginxsrc\src\http):        sn->regex = ngx_http_regex_compile(cf, &rc);
+Ngx_http_rewrite_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):    regex->regex = ngx_http_regex_compile(cf, &rc);
+Ngx_http_rewrite_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):            regex->regex = ngx_http_regex_compile(cf, &rc);//编译这个正则表达式，但是没有处理codes的。
+Ngx_http_variables.c (h:\dropbox\github\readnginxsrc\src\http):ngx_http_regex_t * ngx_http_regex_compile(ngx_conf_t *cf, ngx_regex_compile_t *rc) {
+Ngx_http_variables.h (h:\dropbox\github\readnginxsrc\src\http):ngx_http_regex_t *ngx_http_regex_compile(ngx_conf_t *cf,

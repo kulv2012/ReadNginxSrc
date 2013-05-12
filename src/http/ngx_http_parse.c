@@ -1491,8 +1491,7 @@ unsafe:
 
 
 ngx_int_t
-ngx_http_parse_multi_header_lines(ngx_array_t *headers, ngx_str_t *name,
-    ngx_str_t *value)
+ngx_http_parse_multi_header_lines(ngx_array_t *headers, ngx_str_t *name, ngx_str_t *value)
 {
     ngx_uint_t         i;
     u_char            *start, *last, *end, ch;
@@ -1565,7 +1564,7 @@ ngx_http_parse_multi_header_lines(ngx_array_t *headers, ngx_str_t *name,
 
 ngx_int_t
 ngx_http_arg(ngx_http_request_t *r, u_char *name, size_t len, ngx_str_t *value)
-{
+{//根据name查找指定参数的值，存入value
     u_char  *p, *last;
 
     if (r->args.len == 0) {

@@ -100,29 +100,19 @@ ngx_array_push_n(ngx_array_t *a, ngx_uint_t n)
     ngx_pool_t  *p;
 
     size = n * a->size;
-
     if (a->nelts + n > a->nalloc) {
-
         /* the array is full */
-
         p = a->pool;
-
-        if ((u_char *) a->elts + a->size * a->nalloc == p->d.last
-            && p->d.last + size <= p->d.end)
-        {
+        if ((u_char *) a->elts + a->size * a->nalloc == p->d.last && p->d.last + size <= p->d.end) {
             /*
              * the array allocation is the last in the pool
              * and there is space for new allocation
              */
-
             p->d.last += size;
             a->nalloc += n;
-
         } else {
             /* allocate a new array */
-
-            nalloc = 2 * ((n >= a->nalloc) ? n : a->nalloc);
-
+            nalloc = 2 * ((n >= a->nalloc) ? n : a->nalloc);//否则申请2倍的数目
             new = ngx_palloc(p, nalloc * a->size);
             if (new == NULL) {
                 return NULL;

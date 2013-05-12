@@ -397,12 +397,12 @@ struct ngx_http_request_s {
     ngx_http_handler_pt               content_handler;
     ngx_uint_t                        access_code;
 
-    ngx_http_variable_value_t        *variables;//啥东西
+    ngx_http_variable_value_t        *variables;//这个请求的变量数组。比如碰到正则表达式后，解析出来的$1,$2等
 
 #if (NGX_PCRE)
-    ngx_uint_t                        ncaptures;
-    int                              *captures;
-    u_char                           *captures_data;
+    ngx_uint_t                        ncaptures;//最大的$n*2
+    int                              *captures;//每个不同的正则解析之后的结果，存放在这里。$1,$2等
+    u_char                           *captures_data;//要进行正则解析的字符串是什么，一般就是url
 #endif
 
     size_t                            limit_rate;
