@@ -81,7 +81,7 @@ typedef struct {
 typedef struct {
     ngx_conf_t                 *cf;
     ngx_str_t                  *value;//后面的参数字符串，要解析的字符串。
-    ngx_http_complex_value_t   *complex_value;
+    ngx_http_complex_value_t   *complex_value;//复杂表达式的lcode,codes数组的结构，存储了复杂表达式的解析信息。
 
     unsigned                    zero:1;
     unsigned                    conf_prefix:1;

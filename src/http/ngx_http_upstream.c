@@ -418,6 +418,9 @@ void ngx_http_upstream_init(ngx_http_request_t *r)
 static void
 ngx_http_upstream_init_request(ngx_http_request_t *r)
 {//ngx_http_upstream_init调用这里，此时客户端发送的数据都已经接收完毕了。
+/*1. 调用create_request创建fcgi或者proxy的数据结构。
+  2. 调用ngx_http_upstream_connect连接下游服务器。
+  */
     ngx_str_t                      *host;
     ngx_uint_t                      i;
     ngx_resolver_ctx_t             *ctx, temp;
@@ -508,43 +511,46 @@ ngx_http_upstream_init_request(ngx_http_request_t *r)
     if (u->resolved == NULL) {//上游的IP地址是否被解析过，ngx_http_fastcgi_handler调用ngx_http_fastcgi_eval会解析。
         uscf = u->conf->upstream;
     } else {
-        if (u->resolved->sockaddr) {//如果地址已经被resolve过了，此时创建round robin peer
+    //ngx_http_fastcgi_handler 会调用 ngx_http_fastcgi_eval函数，进行fastcgi_pass 后面的URL的简析，解析出unix域，或者socket.
+        if (u->resolved->sockaddr) {//如果地址已经被resolve过了，我IP地址，此时创建round robin peer就行
             if (ngx_http_upstream_create_round_robin_peer(r, u->resolved) != NGX_OK) {
                 ngx_http_upstream_finalize_request(r, u,  NGX_HTTP_INTERNAL_SERVER_ERROR);
                 return;
             }
-            ngx_http_upstream_connect(r, u);
+            ngx_http_upstream_connect(r, u);//连接之
             return;
         }
-        host = &u->resolved->host;
+		//下面开始查找域名，因为fcgi_pass后面不是ip:port，而是url；
+        host = &u->resolved->host;//获取host信息。
         umcf = ngx_http_get_module_main_conf(r, ngx_http_upstream_module);
-        uscfp = umcf->upstreams.elts;//所有的上游模块
+        uscfp = umcf->upstreams.elts;//遍历所有的上游模块，根据其host进行查找，找到host,port相同的。
         for (i = 0; i < umcf->upstreams.nelts; i++) {
             uscf = uscfp[i];//找一个IP一样的上流模块
             if (uscf->host.len == host->len && ((uscf->port == 0 && u->resolved->no_port) || uscf->port == u->resolved->port)
                 && ngx_memcmp(uscf->host.data, host->data, host->len) == 0) {
-                goto found;
+                goto found;//这个host正好相等
             }
         }
-
+		//没办法了，url不在upstreams数组里面，也就是不是我们配置的，那么初始化域名解析器
         temp.name = *host;
-        ctx = ngx_resolve_start(clcf->resolver, &temp);//拷贝一下IP，port等
+        ctx = ngx_resolve_start(clcf->resolver, &temp);//进行域名解析，带缓存的。申请相关的结构，返回上下文地址。
         if (ctx == NULL) {
             ngx_http_upstream_finalize_request(r, u,NGX_HTTP_INTERNAL_SERVER_ERROR);
             return;
         }
-        if (ctx == NGX_NO_RESOLVER) {
+        if (ctx == NGX_NO_RESOLVER) {//如法进行域名解析。
             ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,  "no resolver defined to resolve %V", host);
             ngx_http_upstream_finalize_request(r, u, NGX_HTTP_BAD_GATEWAY);
             return;
         }
-
+		
         ctx->name = *host;
         ctx->type = NGX_RESOLVE_A;
-        ctx->handler = ngx_http_upstream_resolve_handler;
+        ctx->handler = ngx_http_upstream_resolve_handler;//设置域名解析完成后的回调函数。
         ctx->data = r;
         ctx->timeout = clcf->resolver_timeout;
         u->resolved->ctx = ctx;
+		//开始域名解析，没有完成也会返回的。
         if (ngx_resolve_name(ctx) != NGX_OK) {
             u->resolved->ctx = NULL;
             ngx_http_upstream_finalize_request(r, u, NGX_HTTP_INTERNAL_SERVER_ERROR);
@@ -769,7 +775,7 @@ ngx_http_upstream_cache_send(ngx_http_request_t *r, ngx_http_upstream_t *u)
 
 static void
 ngx_http_upstream_resolve_handler(ngx_resolver_ctx_t *ctx)
-{
+{//nginx 域名解析完后会调用这里。
     ngx_http_request_t            *r;
     ngx_http_upstream_t           *u;
     ngx_http_upstream_resolved_t  *ur;
@@ -778,15 +784,14 @@ ngx_http_upstream_resolve_handler(ngx_resolver_ctx_t *ctx)
     u = r->upstream;
     ur = u->resolved;
     if (ctx->state) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "%V could not be resolved (%i: %s)",
-                      &ctx->name, ctx->state,ngx_resolver_strerror(ctx->state));
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, 
+			"%V could not be resolved (%i: %s)", &ctx->name, ctx->state,ngx_resolver_strerror(ctx->state));
         ngx_http_upstream_finalize_request(r, u, NGX_HTTP_BAD_GATEWAY);
         return;
     }
 
     ur->naddrs = ctx->naddrs;
     ur->addrs = ctx->addrs;
-
 #if (NGX_DEBUG)
     {
     in_addr_t   addr;
@@ -796,9 +801,7 @@ ngx_http_upstream_resolve_handler(ngx_resolver_ctx_t *ctx)
         addr = ntohl(ur->addrs[i]);
 
         ngx_log_debug4(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                       "name was resolved to %ud.%ud.%ud.%ud",
-                       (addr >> 24) & 0xff, (addr >> 16) & 0xff,
-                       (addr >> 8) & 0xff, addr & 0xff);
+                       "name was resolved to %ud.%ud.%ud.%ud", (addr >> 24) & 0xff, (addr >> 16) & 0xff,(addr >> 8) & 0xff, addr & 0xff);
     }
     }
 #endif
@@ -819,6 +822,7 @@ ngx_http_upstream_resolve_handler(ngx_resolver_ctx_t *ctx)
 static void
 ngx_http_upstream_handler(ngx_event_t *ev)
 {//这个是读写事件的统一回调函数，不过自己会根据读还是写调用对应的write_event_handler等
+//ngx_http_upstream_connect设置的读写句柄。
     ngx_connection_t     *c;
     ngx_http_request_t   *r;
     ngx_http_log_ctx_t   *ctx;
@@ -1289,7 +1293,8 @@ ngx_http_upstream_send_request_handler(ngx_http_request_t *r, ngx_http_upstream_
 
 
 static void ngx_http_upstream_process_header(ngx_http_request_t *r, ngx_http_upstream_t *u)
-{//读取FCGI头部数据，或者proxy头部数据。
+{//读取FCGI头部数据，或者proxy头部数据。ngx_http_upstream_send_request发送完数据后，
+//会调用这里，或者有可写事件的时候会调用这里。
     ssize_t            n;
     ngx_int_t          rc;
     ngx_connection_t  *c;
@@ -1316,7 +1321,7 @@ static void ngx_http_upstream_process_header(ngx_http_request_t *r, ngx_http_ups
         u->buffer.end = u->buffer.start + u->conf->buffer_size;
         u->buffer.temporary = 1;
         u->buffer.tag = u->output.tag;
-		//初始化headers_in存放头部信息
+		//初始化headers_in存放头部信息，后端FCGI,proxy解析后的HTTP头部将放入这里
         if (ngx_list_init(&u->headers_in.headers, r->pool, 8, sizeof(ngx_table_elt_t))
             != NGX_OK){
             ngx_http_upstream_finalize_request(r, u, NGX_HTTP_INTERNAL_SERVER_ERROR);
@@ -1331,9 +1336,10 @@ static void ngx_http_upstream_process_header(ngx_http_request_t *r, ngx_http_ups
     }
 
     for ( ;; ) {//不断调recv读取数据，如果没有了，就先返回
+    //recv 为 ngx_unix_recv，读取数据放在u->buffer.last的位置，返回读到的大小。
         n = c->recv(c, u->buffer.last, u->buffer.end - u->buffer.last);
         if (n == NGX_AGAIN) {//还没有读完，还需要关注这个事情。
-            if (ngx_handle_read_event(c->read, 0) != NGX_OK) {
+            if (ngx_handle_read_event(c->read, 0) != NGX_OK) {//参数为0，那就不变，保持原样
                 ngx_http_upstream_finalize_request(r, u, NGX_HTTP_INTERNAL_SERVER_ERROR);
                 return;
             }
@@ -1348,15 +1354,18 @@ static void ngx_http_upstream_process_header(ngx_http_request_t *r, ngx_http_ups
         }
         u->buffer.last += n;//成功，移动读取到的字节数指到最后面
         rc = u->process_header(r);//ngx_http_fastcgi_process_header等，进行数据处理，比如后端返回的数据头部解析，body读取等。
+        //注意这个函数执行完成后，BODY不一定全部读取成功了。这个函数类似插件，有FCGI，proxy插件，将其FCGI的包数据解析，
+        //解析出HTTP头部，放入headers_in里面，当头部解析碰到\r\n\r\n的时候，也就是空行，结束返回，暂时不读取BODY了。
+        //因为我们必须处理头部才知道到底有多少BODY，还有没有FCGI_STDOUT。
         if (rc == NGX_AGAIN) {
             if (u->buffer.pos == u->buffer.end) {
                 ngx_log_error(NGX_LOG_ERR, c->log, 0,"upstream sent too big header");
                 ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_INVALID_HEADER);
                 return;
             }
-            continue;//继续。请求的HTTP头部没有处理完毕。
+            continue;//继续。请求的HTTP，FCGI头部没有处理完毕。
         }
-        break;//到这里说明请求的头部已经解析完毕了。下面只剩下body了
+        break;//到这里说明请求的头部已经解析完毕了。下面只剩下body了，BODY不急
     }
     if (rc == NGX_HTTP_UPSTREAM_INVALID_HEADER) {//头部格式错误。尝试下一个服务器。
         ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_INVALID_HEADER);
@@ -1378,11 +1387,13 @@ static void ngx_http_upstream_process_header(ngx_http_request_t *r, ngx_http_ups
             return;
         }
     }
+	//到这里，FCGI等格式的数据已经解析为标准HTTP的表示形式了(除了BODY)，所以可以进行upstream的process_headers。
+	//上面的 u->process_header(r)已经进行FCGI等格式的解析了。下面将头部数据拷贝到headers_out.headers数组中。
     if (ngx_http_upstream_process_headers(r, u) != NGX_OK) {
         return;//解析请求的头部字段。每行HEADER回调其copy_handler，然后拷贝一下状态码等。
     }
     if (!r->subrequest_in_memory) {//如果没有子请求了，那就直接发送响应给客户端吧。
-        ngx_http_upstream_send_response(r, u);
+        ngx_http_upstream_send_response(r, u);//给客户端发送响应，里面会处理header,body分开发送的情况的
         return;
     }
 	//如果还有子请求的话。子请求不是标准HTTP。
@@ -1645,7 +1656,7 @@ ngx_http_upstream_process_headers(ngx_http_request_t *r, ngx_http_upstream_t *u)
             continue;
         }
 		///如果没有注册句柄，那就老老实实的拷贝一下头部就行了、
-        if (ngx_http_upstream_copy_header_line(r, &h[i], 0) != NGX_OK) {
+        if (ngx_http_upstream_copy_header_line(r, &h[i], 0) != NGX_OK) {//将头部数据拷贝到headers_out.headers数组中。
             ngx_http_upstream_finalize_request(r, u,  NGX_HTTP_INTERNAL_SERVER_ERROR);
             return NGX_DONE;
         }
@@ -1731,7 +1742,7 @@ ngx_http_upstream_process_body_in_memory(ngx_http_request_t *r,
 
 
 static void ngx_http_upstream_send_response(ngx_http_request_t *r, ngx_http_upstream_t *u)
-{//发送请求数据给客户端 http://www.pagefault.info/?p=324
+{//发送请求数据给客户端。里面会处理header,body分开发送的情况的 
     int                        tcp_nodelay;
     ssize_t                    n;
     ngx_int_t                  rc;
@@ -1739,44 +1750,45 @@ static void ngx_http_upstream_send_response(ngx_http_request_t *r, ngx_http_upst
     ngx_connection_t          *c;
     ngx_http_core_loc_conf_t  *clcf;
 
-    rc = ngx_http_send_header(r);//调用每一个filter过滤，处理头部数据。最后将数据发送给客户端。
+    rc = ngx_http_send_header(r);//调用每一个filter过滤，处理头部数据。最后将数据发送给客户端。调用ngx_http_top_header_filter
     if (rc == NGX_ERROR || rc > NGX_OK || r->post_action) {
         ngx_http_upstream_finalize_request(r, u, rc);
         return;
     }
     c = r->connection;
-    if (r->header_only) {
+    if (r->header_only) {//如果只需要发送头部数据，比如客户端用curl -I 访问的。返回204状态码即可。
         if (u->cacheable || u->store) {
-            if (ngx_shutdown_socket(c->fd, NGX_WRITE_SHUTDOWN) == -1) {
+            if (ngx_shutdown_socket(c->fd, NGX_WRITE_SHUTDOWN) == -1) {//关闭TCP的写数据流
                 ngx_connection_error(c, ngx_socket_errno, ngx_shutdown_socket_n " failed");
             }
-            r->read_event_handler = ngx_http_request_empty_handler;
+            r->read_event_handler = ngx_http_request_empty_handler;//设置读写事件回调为空函数，这样就不会care数据读写了。
             r->write_event_handler = ngx_http_request_empty_handler;
-            c->error = 1;
+            c->error = 1;//标记为1，一会就会关闭连接的。
         } else {
             ngx_http_upstream_finalize_request(r, u, rc);
             return;
         }
     }
-    u->header_sent = 1;//标记已经发送了头部字段。
+    u->header_sent = 1;//标记已经发送了头部字段，至少是已经挂载出去，经过了filter了。
     if (r->request_body && r->request_body->temp_file) {//删除客户端发送的数据局体
         ngx_pool_run_cleanup_file(r->pool, r->request_body->temp_file->file.fd);
         r->request_body->temp_file->file.fd = NGX_INVALID_FILE;
     }
     clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
-    if (!u->buffering) {
-//这个标记的含义就是nginx是否会尽可能多的读取upstream的数据。如果关闭，则就是一个同步的发送，
-//也就是接收多少，发送给客户端多少。默认这个是打开的。也就是nginx会buf住upstream发送的数据。
-        if (u->input_filter == NULL) {//如果input_filter为空，则设置默认的filter
+    if (!u->buffering) {//注意buffering模式不能用于FCGI，FCGI写死为1.因为FCGI是包式的传输。非流式
+//buffering只nginx是反应该先buffer 后端FCGI发过来的数据，然后一次发送给客户端。
+//默认这个是打开的。也就是nginx会buf住upstream发送的数据。这样效率会更高。
+        if (u->input_filter == NULL) {//如果input_filter为空，则设置默认的filter，然后准备发送数据到客户端。然后试着读读FCGI
             u->input_filter_init = ngx_http_upstream_non_buffered_filter_init;//实际上为空函数
-            u->input_filter = ngx_http_upstream_non_buffered_filter;
+            //ngx_http_upstream_non_buffered_filter将u->buffer.last - u->buffer.pos之间的数据放到u->out_bufs发送缓冲去链表里面。
+            u->input_filter = ngx_http_upstream_non_buffered_filter;//一般就设置为这个默认的，memcache为ngx_http_memcached_filter
             u->input_filter_ctx = r;
         }
-		//设置读写函数回调
+		//设置upstream的读事件回调，设置客户端连接的写事件回调。
         u->read_event_handler = ngx_http_upstream_process_non_buffered_upstream;
         r->write_event_handler = ngx_http_upstream_process_non_buffered_downstream;//调用过滤模块一个个过滤body，最终发送出去。
         r->limit_rate = 0;
-        if (u->input_filter_init(u->input_filter_ctx) == NGX_ERROR) {//调用input filter 初始化函数
+        if (u->input_filter_init(u->input_filter_ctx) == NGX_ERROR) {//调用input filter 初始化函数，没做什么事情
             ngx_http_upstream_finalize_request(r, u, 0);
             return;
         }
@@ -1792,26 +1804,28 @@ static void ngx_http_upstream_send_response(ngx_http_request_t *r, ngx_http_upst
         }
         n = u->buffer.last - u->buffer.pos;//得到将要发送的数据的大小，每次有多少就发送多少。不等待upstream了
         if (n) {
-            u->buffer.last = u->buffer.pos;//注意这里，可以看到buffer被reset了。
-            u->state->response_length += n;//设置将要发送的数据大小
-            if (u->input_filter(u->input_filter_ctx, n) == NGX_ERROR) {//调用input filter
+            u->buffer.last = u->buffer.pos;//将last指向为当前的pos，那post-last之前的数据没了，不过上面有个n记着了的。
+            u->state->response_length += n;//统计请求的返回数据长度。
+            //下面input_filter只是简单的拷贝buffer上面的数据总共n长度的，到u->out_bufs里面去，以待发送。
+            if (u->input_filter(u->input_filter_ctx, n) == NGX_ERROR) {//一般为ngx_http_upstream_non_buffered_filter
                 ngx_http_upstream_finalize_request(r, u, 0);
                 return;
             }
-            ngx_http_upstream_process_non_buffered_downstream(r);//最终开始发送数据到downstream
-        } else {//说明buffer是空
+			//开始发送数据到downstream，然后读取数据，然后发送，如此循环，知道不可读/不可写
+            ngx_http_upstream_process_non_buffered_downstream(r);
+        } else {//没有数据，长度为0，不需要发送了吧。不，要flush
             u->buffer.pos = u->buffer.start;
             u->buffer.last = u->buffer.start;
-            if (ngx_http_send_special(r, NGX_HTTP_FLUSH) == NGX_ERROR) {//此时刷新数据到client
+            if (ngx_http_send_special(r, NGX_HTTP_FLUSH) == NGX_ERROR) {
                 ngx_http_upstream_finalize_request(r, u, 0);
                 return;
             }
-            if (u->peer.connection->read->ready) {//如果可读，则继续读取upstream的数据.
+            if (u->peer.connection->read->ready) {//如果后端FCGI可读，则继续读取upstream的数据.然后发送
                 ngx_http_upstream_process_non_buffered_upstream(r, u);
             }
         }
         return;
-    }
+    }//!u->buffering结束
 //下面就是要进行后端数据缓存处理的过程了。也就是使用了buffering标记的条件下
     /* TODO: preallocate event_pipe bufs, look "Content-Length" */
 #if (NGX_HTTP_CACHE)//先不管cache
@@ -1874,7 +1888,7 @@ static void ngx_http_upstream_send_response(ngx_http_request_t *r, ngx_http_upst
     if (u->cacheable == 0 && r->cache) {
         ngx_http_file_cache_free(r->cache, u->pipe->temp_file);
     }
-#endif
+#endif //缓存文件处理完成。
     p = u->pipe;
     p->output_filter = (ngx_event_pipe_output_filter_pt) ngx_http_output_filter;//设置filter，可以看到就是http的输出filter
     p->output_ctx = r;
@@ -1948,15 +1962,17 @@ static void ngx_http_upstream_send_response(ngx_http_request_t *r, ngx_http_upst
     p->read_timeout = u->conf->read_timeout;
     p->send_timeout = clcf->send_timeout;
     p->send_lowat = clcf->send_lowat;
-    u->read_event_handler = ngx_http_upstream_process_upstream;
-    r->write_event_handler = ngx_http_upstream_process_downstream;
+    u->read_event_handler = ngx_http_upstream_process_upstream;//设置读事件结构，是用来处理超时，关闭连接等用的。
+    r->write_event_handler = ngx_http_upstream_process_downstream;//设置可写事件结构。这样就可以给客户端发送数据了。
+    //发动一下数据读取吧。
     ngx_http_upstream_process_upstream(r, u);
 }
 
 
 static void
 ngx_http_upstream_process_non_buffered_downstream(ngx_http_request_t *r)
-{
+{//ngx_http_upstream_send_response发送完HERDER后，如果是非缓冲模式，会调用这里将数据发送出去的。
+//这个函数实际上判断一下超时后，就调用ngx_http_upstream_process_non_buffered_request了。nginx老方法。
     ngx_event_t          *wev;
     ngx_connection_t     *c;
     ngx_http_upstream_t  *u;
@@ -1972,14 +1988,14 @@ ngx_http_upstream_process_non_buffered_downstream(ngx_http_request_t *r)
         ngx_http_upstream_finalize_request(r, u, 0);
         return;
     }
-    ngx_http_upstream_process_non_buffered_request(r, 1);//要立即发送，因为是一个读写事件回调函数。
+	//下面开始将out_bufs里面的数据发送出去，然后读取数据，然后发送，如此循环。
+    ngx_http_upstream_process_non_buffered_request(r, 1);
 }
 
 
 static void
-ngx_http_upstream_process_non_buffered_upstream(ngx_http_request_t *r,
-    ngx_http_upstream_t *u)
-{
+ngx_http_upstream_process_non_buffered_upstream(ngx_http_request_t *r, ngx_http_upstream_t *u)
+{//ngx_http_upstream_send_response设置和调用这里，当上游的PROXY有数据到来，可以读取的时候调用这里。
     ngx_connection_t  *c;
 
     c = u->peer.connection;
@@ -1990,13 +2006,16 @@ ngx_http_upstream_process_non_buffered_upstream(ngx_http_request_t *r,
         ngx_http_upstream_finalize_request(r, u, 0);
         return;
     }
+	//这里跟ngx_http_upstream_process_non_buffered_downstream其实就一个区别: 参数为0，表示不用立即发送数据，因为没有数据可以发送，得先读取才行。
     ngx_http_upstream_process_non_buffered_request(r, 0);
 }
 
 
 static void
 ngx_http_upstream_process_non_buffered_request(ngx_http_request_t *r, ngx_uint_t do_write)
-{//调用过滤模块，将数据发送出去
+{//调用过滤模块，将数据发送出去，do_write为是否要给客户端发送数据。
+//1.如果要发送，就调用ngx_http_output_filter将数据发送出去。
+//2.然后ngx_unix_recv读取数据，放入out_bufs里面去。如此循环
     size_t                     size;
     ssize_t                    n;
     ngx_buf_t                 *b;
@@ -2008,46 +2027,56 @@ ngx_http_upstream_process_non_buffered_request(ngx_http_request_t *r, ngx_uint_t
     u = r->upstream;
     downstream = r->connection;//找到这个请求的客户端连接
     upstream = u->peer.connection;//找到上游的连接
-    b = &u->buffer;//找到这坨要发送的数据
+    b = &u->buffer;//找到这坨要发送的数据，不过大部分都被input filter放到out_bufs里面去了。
     do_write = do_write || u->length == 0;//do_write为1时表示要立即发送给客户端。
     for ( ;; ) {
         if (do_write) {//要立即发送。
             if (u->out_bufs || u->busy_bufs) {
-				//如果u->out_bufs不为NULL则说明有需要发送的数据，如果u->busy_bufs，则说明上次有未发送完毕的数据.
-                rc = ngx_http_output_filter(r, u->out_bufs);//一个个调用过滤模块，最终发送数据。
+				//如果u->out_bufs不为NULL则说明有需要发送的数据，这是ngx_http_upstream_non_buffered_filter拷贝到这里的。
+				//u->busy_bufs代表上次未发送完毕的数据.
+                rc = ngx_http_output_filter(r, u->out_bufs);//一个个调用ngx_http_top_body_filter过滤模块，最终发送数据。
                 if (rc == NGX_ERROR) {
                     ngx_http_upstream_finalize_request(r, u, 0);
                     return;
                 }
-                ngx_chain_update_chains(&u->free_bufs, &u->busy_bufs, &u->out_bufs, u->output.tag);//更新busy chain
+				//下面将out_bufs的元素移动到busy_bufs的后面；将已经发送完毕的busy_bufs链表元素移动到free_bufs里面
+                ngx_chain_update_chains(&u->free_bufs, &u->busy_bufs, &u->out_bufs, u->output.tag);
             }
-            if (u->busy_bufs == NULL) {//这里说明想要发送的数据都已经发送完毕
+            if (u->busy_bufs == NULL) {//busy_bufs没有了，都发完了。想要发送的数据都已经发送完毕
                 if (u->length == 0 || upstream->read->eof || upstream->read->error) {
 					//此时finalize request，结束这次请求
                     ngx_http_upstream_finalize_request(r, u, 0);
                     return;
                 }
-                b->pos = b->start;//否则重置u->buffer,以便与下次使用
+                b->pos = b->start;//重置u->buffer,以便与下次使用，从开始起
                 b->last = b->start;
             }
-        }
-        size = b->end - b->last;//得到当前buf的剩余空间
+        }//当前缓存里面的数据发送给客户端告一段落
+        size = b->end - b->last;//得到当前buf的剩余空间，其实如果do_write=1，很可能就为全空的缓冲区
         if (size > u->length) {
             size = u->length;
         }
-        if (size && upstream->read->ready) {//如果还有数据需要接受，并且upstream可读，则读取数据
-            n = upstream->recv(upstream, b->last, size);//为什么这里还有可读数据呢，不是已经接到FCGI的结束包了吗
-            if (n == NGX_AGAIN) {
+        if (size && upstream->read->ready) {//当前的这块buffer还有剩余空间，并且碰巧跟UPSTREAM的连接是可读的，也就是FCGI发送了数据。
+/*为什么这里还有可读数据呢，不是已经接到FCGI的结束包了吗，因为之前只是读取完了HTTP头部,碰到\r\n\r\n后就退出了
+   那问题来了，upstream怎么知道该怎么读取呢，FCGI,PROXY怎么办，看到这里我想gdb试试，于是找FCGI的buffering类似的选项，未果。查看网上信息:
+   恍然大悟，FCGI协议是无所谓buffering了，它不是流式的数据，而是包式的一个个包，所以必然不能buffering.
+   http://www.ruby-forum.com/topic/197216
+Yes. It's because of FastCGI protocol internals. It splits "stream"
+into blocks max 32KB each. Each block has header info (how many bytes
+it contains, etc). So nginx can't send content to the client until it
+get the whole block from upstream.*/
+            n = upstream->recv(upstream, b->last, size);//调用ngx_unix_recv读取数据到last成员，很简单的recv()就行了。
+            if (n == NGX_AGAIN) {//下回再来，这回没数据了。
                 break;
             }
-            if (n > 0) {//读了一些数据，将它发送出去吧，也就是放入到out_bufs链表里面去
+            if (n > 0) {//读了一些数据，立马将它发送出去吧，也就是放入到out_bufs链表里面去，没有实际发送的，那么，什么时候发送呢
                 u->state->response_length += n;//再次调用input_filter,这里没有reset u->buffer.last,这是因为我们这个值并没有更新.
                 if (u->input_filter(u->input_filter_ctx, n) == NGX_ERROR) {//就是ngx_http_upstream_non_buffered_filter
                     ngx_http_upstream_finalize_request(r, u, 0);
                     return;
                 }
             }
-            do_write = 1;//设置do_write,然后发送数据.表示还要发送数据
+            do_write = 1;//因为刚刚无论如何n大于0，所以读取了数据，那么下一个循环会将out_bufs的数据发送出去的。
             continue;
         }
         break;
@@ -2087,6 +2116,7 @@ ngx_http_upstream_non_buffered_filter_init(void *data)
 static ngx_int_t
 ngx_http_upstream_non_buffered_filter(void *data, ssize_t bytes)
 {//将u->buffer.last - u->buffer.pos之间的数据放到u->out_bufs发送缓冲去链表里面。这样可写的时候就会发送给客户端。
+//ngx_http_upstream_process_non_buffered_request函数会读取out_bufs里面的数据，然后调用输出过滤链接进行发送的。
     ngx_http_request_t  *r = data;
     ngx_buf_t            *b;
     ngx_chain_t          *cl, **ll;
@@ -2170,8 +2200,7 @@ ngx_http_upstream_process_downstream(ngx_http_request_t *r)
 
 
 static void
-ngx_http_upstream_process_upstream(ngx_http_request_t *r,
-    ngx_http_upstream_t *u)
+ngx_http_upstream_process_upstream(ngx_http_request_t *r, ngx_http_upstream_t *u)
 {
     ngx_connection_t  *c;
     c = u->peer.connection;
@@ -2180,7 +2209,7 @@ ngx_http_upstream_process_upstream(ngx_http_request_t *r,
     if (c->read->timedout) {//如果超时了
         u->pipe->upstream_error = 1;
         ngx_connection_error(c, NGX_ETIMEDOUT, "upstream timed out");
-    } else {
+    } else {//请求没有超时，那么对后端，处理一下读事件。
         if (ngx_event_pipe(u->pipe, 0) == NGX_ABORT) {
             ngx_http_upstream_finalize_request(r, u, 0);
             return;
@@ -2451,21 +2480,16 @@ ngx_http_upstream_next(ngx_http_request_t *r, ngx_http_upstream_t *u,
 
 static void
 ngx_http_upstream_cleanup(void *data)
-{
+{//结束一个连接。如果解析过fcgi_pass url； 则调用ngx_resolve_name_done
     ngx_http_request_t *r = data;
-
     ngx_http_upstream_t  *u;
 
-    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "cleanup http upstream request: \"%V\"", &r->uri);
-
+    ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "cleanup http upstream request: \"%V\"", &r->uri);
     u = r->upstream;
-
     if (u->resolved && u->resolved->ctx) {
         ngx_resolve_name_done(u->resolved->ctx);
         u->resolved->ctx = NULL;
     }
-
     ngx_http_upstream_finalize_request(r, u, NGX_DONE);
 }
 
@@ -2857,9 +2881,8 @@ ngx_http_upstream_process_charset(ngx_http_request_t *r, ngx_table_elt_t *h,
 
 
 static ngx_int_t
-ngx_http_upstream_copy_header_line(ngx_http_request_t *r, ngx_table_elt_t *h,
-    ngx_uint_t offset)
-{
+ngx_http_upstream_copy_header_line(ngx_http_request_t *r, ngx_table_elt_t *h, ngx_uint_t offset)
+{//将头部数据拷贝到headers_out.headers数组中。
     ngx_table_elt_t  *ho, **ph;
     ho = ngx_list_push(&r->headers_out.headers);
     if (ho == NULL) {

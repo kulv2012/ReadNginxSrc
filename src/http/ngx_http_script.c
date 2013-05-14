@@ -405,7 +405,7 @@ invalid_variable:
 
 u_char *
 ngx_http_script_run(ngx_http_request_t *r, ngx_str_t *value, void *code_lengths, size_t len, void *code_values)
-{
+{//根据lcodes和codes计算目标字符串的内容并返回。
     ngx_uint_t                    i;
     ngx_http_script_code_pt       code;
     ngx_http_script_len_code_pt   lcode;

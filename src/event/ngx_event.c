@@ -269,7 +269,7 @@ ngx_process_events_and_timers(ngx_cycle_t *cycle)
 
 ngx_int_t
 ngx_handle_read_event(ngx_event_t *rev, ngx_uint_t flags)
-{//将一个连接加入可读事件监听中。
+{//将一个连接加入可读事件监听中。参数为0的话不做任何动作。
     if (ngx_event_flags & NGX_USE_CLEAR_EVENT) {
         /* kqueue, epoll */
         if (!rev->active && !rev->ready) {//如果不活跃，还没有设置进去，不ready，没有数据可以读，就加入到epoll

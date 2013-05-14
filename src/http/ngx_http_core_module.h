@@ -291,7 +291,7 @@ struct ngx_http_core_loc_conf_s {
     unsigned      exact_match:1;//是否是精确匹配。比如:location =xxx
     unsigned      noregex:1;//^~ 开头表示uri以某个常规字符串开头，理解为匹配 url路径即可。
 
-    unsigned      auto_redirect:1;
+    unsigned      auto_redirect:1;//如果配置的locaton 后面最后一个字符为/路径结束符，则需要自动重定向。
 #if (NGX_HTTP_GZIP)
     unsigned      gzip_disable_msie6:2;
 #if (NGX_HTTP_DEGRADATION)

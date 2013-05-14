@@ -23,7 +23,7 @@ typedef ngx_int_t (*ngx_event_pipe_output_filter_pt)(void *data,
 
 struct ngx_event_pipe_s {
     ngx_connection_t  *upstream;//表示nginx和client，以及和后端的两条连接
-    ngx_connection_t  *downstream;
+    ngx_connection_t  *downstream;//这个表示客户端的连接
 
     ngx_chain_t       *free_raw_bufs;//保存了从upstream读取的数据(没有经过任何处理的)，以及缓存的buf.
     ngx_chain_t       *in;
@@ -39,11 +39,10 @@ struct ngx_event_pipe_s {
      * the input filter i.e. that moves HTTP/1.1 chunks
      * from the raw bufs to an incoming chain
      */
-
-    ngx_event_pipe_input_filter_pt    input_filter;//这个filter就是输出内容到client的函数，一般设置为ngx_chain_writer
+    ngx_event_pipe_input_filter_pt    input_filter;//这个filter就是输出内容到client的函数，一般设置为ngx_chain_writer， FCGI为ngx_http_fastcgi_input_filter
     void                             *input_ctx;
 
-    ngx_event_pipe_output_filter_pt   output_filter;
+    ngx_event_pipe_output_filter_pt   output_filter;//ngx_http_output_filter输出filter
     void                             *output_ctx;
 
     unsigned           read:1;

@@ -92,7 +92,7 @@ static u_char *ngx_resolver_log_error(ngx_log_t *log, u_char *buf, size_t len);
 
 ngx_resolver_t *
 ngx_resolver_create(ngx_conf_t *cf, ngx_addr_t *addr)
-{
+{//进行域名解析的初始化
     ngx_resolver_t        *r;
     ngx_pool_cleanup_t    *cln;
     ngx_udp_connection_t  *uc;
@@ -140,7 +140,7 @@ ngx_resolver_create(ngx_conf_t *cf, ngx_addr_t *addr)
     r->log = &cf->cycle->new_log;
     r->log_level = NGX_LOG_ERR;
 
-    if (addr) {
+    if (addr) {//设置DNS服务器的地址。
         uc = ngx_calloc(sizeof(ngx_udp_connection_t), cf->log);
         if (uc == NULL) {
             return NULL;
@@ -223,7 +223,7 @@ ngx_resolver_cleanup_tree(ngx_resolver_t *r, ngx_rbtree_t *tree)
 
 ngx_resolver_ctx_t *
 ngx_resolve_start(ngx_resolver_t *r, ngx_resolver_ctx_t *temp)
-{
+{//进行域名解析，申请相关的结构，返回上下文地址。
     in_addr_t            addr;
     ngx_resolver_ctx_t  *ctx;
     if (temp) {
@@ -234,11 +234,11 @@ ngx_resolve_start(ngx_resolver_t *r, ngx_resolver_ctx_t *temp)
             temp->naddrs = 1;
             temp->addrs = &temp->addr;
             temp->addr = addr;
-            temp->quick = 1;
+            temp->quick = 1;//设置为1，表示地址是简单不包含变量的地址，在ngx_resolve_name里面会判断是不是quick==1 的。
             return temp;
         }
     }
-    if (r->udp_connection == NULL) {
+    if (r->udp_connection == NULL) {//
         return NGX_NO_RESOLVER;
     }
     ctx = ngx_resolver_calloc(r, sizeof(ngx_resolver_ctx_t));
@@ -251,40 +251,29 @@ ngx_resolve_start(ngx_resolver_t *r, ngx_resolver_ctx_t *temp)
 
 ngx_int_t
 ngx_resolve_name(ngx_resolver_ctx_t *ctx)
-{
+{//进行变量解析。
     ngx_int_t        rc;
     ngx_resolver_t  *r;
 
     r = ctx->resolver;
-
-    ngx_log_debug1(NGX_LOG_DEBUG_CORE, r->log, 0,
-                   "resolve: \"%V\"", &ctx->name);
-
-    if (ctx->quick) {
+    ngx_log_debug1(NGX_LOG_DEBUG_CORE, r->log, 0, "resolve: \"%V\"", &ctx->name);
+    if (ctx->quick) {//如果已经是IP地址了，直接调用handler，返回。
         ctx->handler(ctx);
         return NGX_OK;
     }
-
     /* lock name mutex */
-
     rc = ngx_resolve_name_locked(r, ctx);
-
     if (rc == NGX_OK) {
         return NGX_OK;
     }
-
     /* unlock name mutex */
-
     if (rc == NGX_AGAIN) {
         return NGX_OK;
     }
-
     /* NGX_ERROR */
-
     if (ctx->event) {
         ngx_resolver_free(r, ctx->event);
     }
-
     ngx_resolver_free(r, ctx);
 
     return NGX_ERROR;
@@ -501,13 +490,11 @@ ngx_resolve_name_locked(ngx_resolver_t *r, ngx_resolver_ctx_t *ctx)
 
         ngx_rbtree_insert(&r->name_rbtree, &rn->node);
     }
-
+	//创建一个DNS查询的数据包
     rc = ngx_resolver_create_name_query(rn, ctx);
-
     if (rc == NGX_ERROR) {
         goto failed;
     }
-
     if (rc == NGX_DECLINED) {
         ngx_rbtree_delete(&r->name_rbtree, &rn->node);
 
@@ -2000,13 +1987,10 @@ static void *
 ngx_resolver_calloc(ngx_resolver_t *r, size_t size)
 {
     u_char  *p;
-
     p = ngx_resolver_alloc(r, size);
-
     if (p) {
         ngx_memzero(p, size);
     }
-
     return p;
 }
 

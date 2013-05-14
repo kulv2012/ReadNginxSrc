@@ -177,25 +177,23 @@ ngx_chain_get_free_buf(ngx_pool_t *p, ngx_chain_t **free)
 
 
 void
-ngx_chain_update_chains(ngx_chain_t **free, ngx_chain_t **busy,
-    ngx_chain_t **out, ngx_buf_tag_t tag)
-{
+ngx_chain_update_chains(ngx_chain_t **free, ngx_chain_t **busy, ngx_chain_t **out, ngx_buf_tag_t tag)
+{//调用方式 &u->free_bufs, &u->busy_bufs, &u->out_bufs, u->output.tag
+//函数完成2个功能: 1. 将out_bufs的缓冲区放入busy_bufs链表的尾部，注意顺序；
+//2.如果busy_bufs里面的数据没有了，发送完毕了，那就将这块buffer缓冲区移动到free_bufs链表里面。
     ngx_chain_t  *cl;
 
-    if (*busy == NULL) {
+    if (*busy == NULL) {//这2个循环，将&u->out_bufs 移动到u->busy_bufs链表尾部。
         *busy = *out;
-
     } else {
         for (cl = *busy; cl->next; cl = cl->next) { /* void */ }
-
         cl->next = *out;
     }
 
     *out = NULL;
-
     while (*busy) {
-        if (ngx_buf_size((*busy)->buf) != 0) {
-            break;
+        if (ngx_buf_size((*busy)->buf) != 0) {//ngx_http_write_filter函数发送的时候会更新buf的。
+            break;//由于这些buffer的顺序性，如果碰到大小不等于0的，也就是数据发送到这里之后的都没有发送出去，不能释放。
         }
 
         if ((*busy)->buf->tag != tag) {
@@ -203,9 +201,9 @@ ngx_chain_update_chains(ngx_chain_t **free, ngx_chain_t **busy,
             continue;
         }
 
-        (*busy)->buf->pos = (*busy)->buf->start;
+        (*busy)->buf->pos = (*busy)->buf->start;//清空busy->buf结构里面的数据
         (*busy)->buf->last = (*busy)->buf->start;
-
+	//下面四行，将busy指向的指针的指向往后移动，然后将当前节点放入free_bufs的头部
         cl = *busy;
         *busy = cl->next;
         cl->next = *free;

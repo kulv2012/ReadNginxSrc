@@ -22,7 +22,7 @@ static ngx_int_t ngx_event_pipe_drain_chains(ngx_event_pipe_t *p);
 
 ngx_int_t
 ngx_event_pipe(ngx_event_pipe_t *p, ngx_int_t do_write)
-{
+{//ngx_event_pipe将upstream响应发送回客户端
     u_int         flags;
     ngx_int_t     rc;
     ngx_event_t  *rev, *wev;
@@ -30,43 +30,32 @@ ngx_event_pipe(ngx_event_pipe_t *p, ngx_int_t do_write)
     for ( ;; ) {
         if (do_write) {
             p->log->action = "sending to client";
-
             rc = ngx_event_pipe_write_to_downstream(p);
-
             if (rc == NGX_ABORT) {
                 return NGX_ABORT;
             }
-
             if (rc == NGX_BUSY) {
                 return NGX_OK;
             }
         }
-
         p->read = 0;
         p->upstream_blocked = 0;
-
         p->log->action = "reading upstream";
-
         if (ngx_event_pipe_read_upstream(p) == NGX_ABORT) {
             return NGX_ABORT;
         }
-
         if (!p->read && !p->upstream_blocked) {
             break;
         }
-
-        do_write = 1;
+        do_write = 1;//还要写。
     }
 
-    if (p->upstream->fd != -1) {
+    if (p->upstream->fd != -1) {//如果后端php等的连接fd是有效的，则注册读写事件。
         rev = p->upstream->read;
-
         flags = (rev->eof || rev->error) ? NGX_CLOSE_EVENT : 0;
-
         if (ngx_handle_read_event(rev, flags) != NGX_OK) {
-            return NGX_ABORT;
+            return NGX_ABORT;//将一个连接加入可读事件监听中。
         }
-
         if (rev->active && !rev->ready) {
             ngx_add_timer(rev, p->read_timeout);
 
@@ -74,23 +63,19 @@ ngx_event_pipe(ngx_event_pipe_t *p, ngx_int_t do_write)
             ngx_del_timer(rev);
         }
     }
-
     if (p->downstream->fd != -1 && p->downstream->data == p->output_ctx) {
-        wev = p->downstream->write;
+        wev = p->downstream->write;//对客户端的连接，注册可写事件。关心可写
         if (ngx_handle_write_event(wev, p->send_lowat) != NGX_OK) {
             return NGX_ABORT;
         }
-
         if (!wev->delayed) {
             if (wev->active && !wev->ready) {
                 ngx_add_timer(wev, p->send_timeout);
-
             } else if (wev->timer_set) {
                 ngx_del_timer(wev);
             }
         }
     }
-
     return NGX_OK;
 }
 

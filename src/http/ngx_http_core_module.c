@@ -1712,6 +1712,7 @@ ngx_http_send_header(ngx_http_request_t *r)
 ngx_int_t
 ngx_http_output_filter(ngx_http_request_t *r, ngx_chain_t *in)
 {//BODY发送函数，调用ngx_http_top_body_filter一个个将他们发送出去
+//参数in为u->out_bufs，也就是待发送的数据，本函数完成后，u->out_bufs的数据将移动到busy_bufs
     ngx_int_t          rc;
     ngx_connection_t  *c;
 
@@ -2009,9 +2010,8 @@ ok:
 
 
 ngx_int_t
-ngx_http_subrequest(ngx_http_request_t *r,
-    ngx_str_t *uri, ngx_str_t *args, ngx_http_request_t **psr,
-    ngx_http_post_subrequest_t *ps, ngx_uint_t flags)
+ngx_http_subrequest(ngx_http_request_t *r, ngx_str_t *uri, ngx_str_t *args, ngx_http_request_t **psr,
+					ngx_http_post_subrequest_t *ps, ngx_uint_t flags)
 {
     ngx_time_t                    *tp;
     ngx_connection_t              *c;
@@ -2034,7 +2034,6 @@ ngx_http_subrequest(ngx_http_request_t *r,
     }
 
     sr->signature = NGX_HTTP_MODULE;
-
     c = r->connection;
     sr->connection = c;
 
@@ -2043,9 +2042,7 @@ ngx_http_subrequest(ngx_http_request_t *r,
         return NGX_ERROR;
     }
 
-    if (ngx_list_init(&sr->headers_out.headers, r->pool, 20,
-                      sizeof(ngx_table_elt_t))
-        != NGX_OK)
+    if (ngx_list_init(&sr->headers_out.headers, r->pool, 20, sizeof(ngx_table_elt_t)) != NGX_OK)
     {
         return NGX_ERROR;
     }
@@ -2075,9 +2072,7 @@ ngx_http_subrequest(ngx_http_request_t *r,
         sr->args = *args;
     }
 
-    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, c->log, 0,
-                   "http subrequest \"%V?%V\"", uri, &sr->args);
-
+    ngx_log_debug2(NGX_LOG_DEBUG_HTTP, c->log, 0, "http subrequest \"%V?%V\"", uri, &sr->args);
     sr->subrequest_in_memory = (flags & NGX_HTTP_SUBREQUEST_IN_MEMORY) != 0;
     sr->waited = (flags & NGX_HTTP_SUBREQUEST_WAITED) != 0;
 

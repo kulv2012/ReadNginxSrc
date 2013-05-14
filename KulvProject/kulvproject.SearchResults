@@ -1,7 +1,4 @@
----- ngx_http_regex_compile Matches (6 in 4 files) ----
-Ngx_http_core_module.c (h:\dropbox\github\readnginxsrc\src\http):    clcf->regex = ngx_http_regex_compile(cf, &rc);
-Ngx_http_core_module.c (h:\dropbox\github\readnginxsrc\src\http):        sn->regex = ngx_http_regex_compile(cf, &rc);
-Ngx_http_rewrite_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):    regex->regex = ngx_http_regex_compile(cf, &rc);
-Ngx_http_rewrite_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):            regex->regex = ngx_http_regex_compile(cf, &rc);//编译这个正则表达式，但是没有处理codes的。
-Ngx_http_variables.c (h:\dropbox\github\readnginxsrc\src\http):ngx_http_regex_t * ngx_http_regex_compile(ngx_conf_t *cf, ngx_regex_compile_t *rc) {
-Ngx_http_variables.h (h:\dropbox\github\readnginxsrc\src\http):ngx_http_regex_t *ngx_http_regex_compile(ngx_conf_t *cf,
+---- ngx_http_upstream_process_buffering Matches (3 in 1 files) ----
+Ngx_http_upstream.c (h:\dropbox\github\readnginxsrc\src\http):static ngx_int_t ngx_http_upstream_process_buffering(ngx_http_request_t *r,
+Ngx_http_upstream.c (h:\dropbox\github\readnginxsrc\src\http):                 ngx_http_upstream_process_buffering, 0,
+Ngx_http_upstream.c (h:\dropbox\github\readnginxsrc\src\http):ngx_http_upstream_process_buffering(ngx_http_request_t *r, ngx_table_elt_t *h,

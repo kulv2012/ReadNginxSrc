@@ -25,7 +25,7 @@ typedef struct {
     ngx_array_t               *scgi_values;
 
 #if (NGX_HTTP_CACHE)
-    ngx_http_complex_value_t   cache_key;
+    ngx_http_complex_value_t   cache_key;//ccv.complex_value ，业就是存放cache_key 后面的复杂表达式结构，可以用其计算cache_key
 #endif
 } ngx_http_scgi_loc_conf_t;
 
@@ -181,7 +181,7 @@ static ngx_command_t ngx_http_scgi_commands[] = {
       NGX_HTTP_LOC_CONF_OFFSET,
       0,
       NULL },
-
+//The directive sets the key for caching, for example:scgi_cache_key localhost:9000$request_uri;
     { ngx_string("scgi_cache_key"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
       ngx_http_scgi_cache_key,
@@ -1603,26 +1603,19 @@ static char *
 ngx_http_scgi_cache(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
     ngx_http_scgi_loc_conf_t *scf = conf;
-
     ngx_str_t  *value;
-
     value = cf->args->elts;
-
     if (scf->upstream.cache != NGX_CONF_UNSET_PTR) {
         return "is duplicate";
     }
-
     if (ngx_strcmp(value[1].data, "off") == 0) {
         scf->upstream.cache = NULL;
         return NGX_CONF_OK;
     }
-
     if (scf->upstream.store > 0 || scf->upstream.store_lengths) {
         return "is incompatible with \"scgi_store\"";
     }
-
-    scf->upstream.cache = ngx_shared_memory_add(cf, &value[1], 0,
-                                                &ngx_http_scgi_module);
+    scf->upstream.cache = ngx_shared_memory_add(cf, &value[1], 0, &ngx_http_scgi_module);
     if (scf->upstream.cache == NULL) {
         return NGX_CONF_ERROR;
     }
@@ -1633,24 +1626,22 @@ ngx_http_scgi_cache(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
 static char *
 ngx_http_scgi_cache_key(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
-{
+{//用法: scgi_cache_key localhost:9000$request_uri;
     ngx_http_scgi_loc_conf_t *scf = conf;
 
     ngx_str_t                         *value;
     ngx_http_compile_complex_value_t   ccv;
 
     value = cf->args->elts;
-
     if (scf->cache_key.value.len) {
         return "is duplicate";
     }
-
     ngx_memzero(&ccv, sizeof(ngx_http_compile_complex_value_t));
-
     ccv.cf = cf;
     ccv.value = &value[1];
     ccv.complex_value = &scf->cache_key;
-
+	//由于后面的line部分是复杂表达式，因此需要进行复杂表达式编译解析。
+	//lcodes，codes存放在 ccv.complex_value里面，也就是&scf->cache_key;
     if (ngx_http_compile_complex_value(&ccv) != NGX_OK) {
         return NGX_CONF_ERROR;
     }

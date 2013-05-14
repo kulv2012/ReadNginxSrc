@@ -80,14 +80,14 @@ typedef struct {
 
     /* TODO: DNS peers balancer */
     /* STUB */
-    ngx_udp_connection_t     *udp_connection;
+    ngx_udp_connection_t     *udp_connection;//DNS服务器的地址。不为空说明用户配置了
 
     ngx_log_t                *log;
 
     /* ident must be after 3 pointers */
     ngx_int_t                 ident;
 
-    ngx_rbtree_t              name_rbtree;
+    ngx_rbtree_t              name_rbtree;//保存本地缓存的数据
     ngx_rbtree_node_t         name_sentinel;
 
     ngx_rbtree_t              addr_rbtree;
@@ -117,7 +117,7 @@ struct ngx_resolver_ctx_s {
 
     ngx_int_t                 state;
     ngx_int_t                 type;
-    ngx_str_t                 name;
+    ngx_str_t                 name;//指向*host;，也就是域名。
 
     ngx_uint_t                naddrs;
     in_addr_t                *addrs;
@@ -125,11 +125,11 @@ struct ngx_resolver_ctx_s {
 
     /* TODO: DNS peers balancer ctx */
 
-    ngx_resolver_handler_pt   handler;
+    ngx_resolver_handler_pt   handler;//ngx_http_upstream_resolve_handler回调
     void                     *data;
     ngx_msec_t                timeout;
 
-    ngx_uint_t                quick;  /* unsigned  quick:1; */
+    ngx_uint_t                quick;  /* unsigned  quick:1; *///需不需要进行域名解析，如果为1，表示不需要进行域名解析了。
     ngx_uint_t                recursion;
     ngx_event_t              *event;
 };

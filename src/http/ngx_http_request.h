@@ -343,7 +343,7 @@ typedef void (*ngx_http_event_handler_pt)(ngx_http_request_t *r);
 struct ngx_http_request_s {
     uint32_t                          signature;         /* "HTTP" */
 
-    ngx_connection_t                 *connection;//索引所对应的SOCK连接  ngx_connection_t
+    ngx_connection_t                 *connection;//索引所对应的SOCK连接  ngx_connection_t，这是客户端的连接。
 
     void                            **ctx;//这是什么?r->ctx[module.ctx_index] = c;那么，每个模块都有一个。
     void                            **main_conf;
@@ -364,7 +364,7 @@ struct ngx_http_request_s {
     ngx_pool_t                       *pool;//一个HTTP请求结构体一个POOL，大小为request_pool_size。其对应的连接也有个POOL
     ngx_buf_t                        *header_in;//header信息的缓存buffer，通过这个缓存对header进行分析
     ngx_http_headers_in_t             headers_in;//请求的header结构体，客户端发送过来的头部数据
-    ngx_http_headers_out_t            headers_out;//输出给客户端的头部数据
+    ngx_http_headers_out_t            headers_out;//输出给客户端的头部数据，ngx_http_upstream_process_headers会设置的。
 
     ngx_http_request_body_t          *request_body;//客户端发送过来的POST数据存放在此,ngx_http_read_client_request_body放的
 

@@ -238,7 +238,7 @@ typedef struct {
     struct sockaddr                 *sockaddr;
     socklen_t                        socklen;
 
-    ngx_resolver_ctx_t              *ctx;
+    ngx_resolver_ctx_t              *ctx;//ngx_resolver_ctx_t½á¹¹£¬Ö¸Ïò½âÎöµÄ¸÷ÏîÊı¾İ
 } ngx_http_upstream_resolved_t;
 
 
@@ -264,18 +264,18 @@ struct ngx_http_upstream_s {//±¾½á¹¹ÌåÓÃÀ´±£´æÒ»¸öÁ¬½ÓµÄupstreamĞÅÏ¢£¬°üÀ¨¸÷ÖÖĞè
 
     ngx_http_upstream_headers_in_t   headers_in;//´æ·Å´ÓÉÏÓÎ·µ»ØµÄÍ·²¿ĞÅÏ¢£¬
 
-    ngx_http_upstream_resolved_t    *resolved;
+    ngx_http_upstream_resolved_t    *resolved;//½âÎö³öÀ´µÄfastcgi_pass   127.0.0.1:9000;ºóÃæµÄ×Ö·û´®ÄÚÈİ£¬¿ÉÄÜÓĞ±äÁ¿Âï¡£
 
     ngx_buf_t                        buffer;///¶ÁÈ¡ÉÏÓÎ·µ»ØµÄÊı¾İµÄ»º³åÇø
     size_t                           length;//Òª·¢ËÍ¸ø¿Í»§¶ËµÄÊı¾İ´óĞ¡
 
     ngx_chain_t                     *out_bufs;//Õâ¸öÊÇÒª·¢ËÍ¸ø¿Í»§¶ËµÄÊı¾İÁ´½Ó±íå?
-    ngx_chain_t                     *busy_bufs;
-    ngx_chain_t                     *free_bufs;
+    ngx_chain_t                     *busy_bufs;//µ÷ÓÃÁËngx_http_output_filter£¬²¢½«out_bufsµÄÁ´±íÊı¾İÒÆ¶¯µ½ÕâÀï£¬´ı·¢ËÍÍê±Ïºó£¬»áÒÆ¶¯µ½free_bufs
+    ngx_chain_t                     *free_bufs;//¿ÕÏĞµÄ»º³åÇø¡£¿ÉÒÔ·ÖÅä
 
-    ngx_int_t                      (*input_filter_init)(void *data);
-    ngx_int_t                      (*input_filter)(void *data, ssize_t bytes);
-    void                            *input_filter_ctx;
+    ngx_int_t                      (*input_filter_init)(void *data);//½øĞĞ³õÊ¼»¯£¬Ã»Ê²Ã´ÓÃ£¬memcacheÉèÖÃÎªngx_http_memcached_filter_init
+    ngx_int_t                      (*input_filter)(void *data, ssize_t bytes);//ngx_http_upstream_non_buffered_filter£¬ngx_http_memcached_filterµÈ¡£
+    void                            *input_filter_ctx;//Ö¸ÏòËùÊôµÄÇëÇóµÈÉÏÏÂÎÄ
 
 #if (NGX_HTTP_CACHE)
     ngx_int_t                      (*create_key)(ngx_http_request_t *r);
@@ -311,7 +311,7 @@ struct ngx_http_upstream_s {//±¾½á¹¹ÌåÓÃÀ´±£´æÒ»¸öÁ¬½ÓµÄupstreamĞÅÏ¢£¬°üÀ¨¸÷ÖÖĞè
     unsigned                         buffering:1;
 
     unsigned                         request_sent:1;//ÊÇ·ñÒÑ¾­½«request_bufsµÄÊı¾İ·ÅÈëÊä³öÁ´±íÀïÃæ
-    unsigned                         header_sent:1;
+    unsigned                         header_sent:1;//±ê¼ÇÒÑ¾­·¢ËÍÁËÍ·²¿×Ö¶Î¡£
 };
 
 

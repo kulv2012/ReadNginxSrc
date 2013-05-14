@@ -20,8 +20,8 @@ typedef struct {
     ngx_array_t                   *params_source;
     ngx_array_t                   *catch_stderr;
 
-    ngx_array_t                   *fastcgi_lengths;
-    ngx_array_t                   *fastcgi_values;
+    ngx_array_t                   *fastcgi_lengths;//存放fcgi里面的脚本引擎，长度获取函数数组
+    ngx_array_t                   *fastcgi_values;//数值拷贝数组
 
     ngx_hash_t                     headers_hash;
     ngx_uint_t                     header_params;
@@ -562,8 +562,8 @@ ngx_http_fastcgi_handler(ngx_http_request_t *r)
     }
     ngx_http_set_ctx(r, f, ngx_http_fastcgi_module);//r->ctx[module.ctx_index] = c;也就是将申请的fcgi_ctx_t放到这个请求的ctx里面
     flcf = ngx_http_get_module_loc_conf(r, ngx_http_fastcgi_module);//得到fcgi的配置。(r)->loc_conf[module.ctx_index]
-    if (flcf->fastcgi_lengths) {
-        if (ngx_http_fastcgi_eval(r, flcf) != NGX_OK) {
+    if (flcf->fastcgi_lengths) {//如果这个fcgi有变量，那么久需要解析一下变量。
+        if (ngx_http_fastcgi_eval(r, flcf) != NGX_OK) {//计算fastcgi_pass   127.0.0.1:9000;后面的URL的内容。也就是域名解析；
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
     }
@@ -572,7 +572,7 @@ ngx_http_fastcgi_handler(ngx_http_request_t *r)
     u->output.tag = (ngx_buf_tag_t) &ngx_http_fastcgi_module;
     u->conf = &flcf->upstream;
 #if (NGX_HTTP_CACHE)
-    u->create_key = ngx_http_fastcgi_create_key;
+    u->create_key = ngx_http_fastcgi_create_key;//根据flcf->cache_key里面的复杂表达式计算 scgi_cache_key line;指令后面的复杂表达式line;
 #endif
     u->create_request = ngx_http_fastcgi_create_request;
     u->reinit_request = ngx_http_fastcgi_reinit_request;
@@ -602,16 +602,16 @@ ngx_http_fastcgi_handler(ngx_http_request_t *r)
 
 static ngx_int_t
 ngx_http_fastcgi_eval(ngx_http_request_t *r, ngx_http_fastcgi_loc_conf_t *flcf)
-{
+{//计算fastcgi_pass   127.0.0.1:9000;后面的URL内容，设置到u->resolved上面去
     ngx_url_t             url;
     ngx_http_upstream_t  *u;
 
     ngx_memzero(&url, sizeof(ngx_url_t));
     if (ngx_http_script_run(r, &url.url, flcf->fastcgi_lengths->elts, 0,flcf->fastcgi_values->elts) == NULL) {
-        return NGX_ERROR;
+        return NGX_ERROR;//根据lcodes和codes计算目标字符串的内容、目标字符串结果存放在value->data;里面，也就是url.url
     }
     url.no_resolve = 1;
-    if (ngx_parse_url(r->pool, &url) != NGX_OK) {
+    if (ngx_parse_url(r->pool, &url) != NGX_OK) {//对u参数里面的url,unix,inet6等地址进行简析；
          if (url.err) {
             ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, upstream \"%V\"", url.err, &url.url);
         }
@@ -628,6 +628,7 @@ ngx_http_fastcgi_eval(ngx_http_request_t *r, ngx_http_fastcgi_loc_conf_t *flcf)
     }
 
     if (url.addrs && url.addrs[0].sockaddr) {
+		//将解析出来的地址保存，在upstream里面急不需要进行与解析了。
         u->resolved->sockaddr = url.addrs[0].sockaddr;
         u->resolved->socklen = url.addrs[0].socklen;
         u->resolved->naddrs = 1;
@@ -644,21 +645,19 @@ ngx_http_fastcgi_eval(ngx_http_request_t *r, ngx_http_fastcgi_loc_conf_t *flcf)
 
 static ngx_int_t
 ngx_http_fastcgi_create_key(ngx_http_request_t *r)
-{
-    ngx_str_t                    *key;
+{//根据之前在解析scgi_cache_key指令的时候计算出来的复杂表达式结构，存放在flcf->cache_key中的，计算出cache_key。
+    ngx_str_t                   *key;
     ngx_http_fastcgi_loc_conf_t  *flcf;
 
     key = ngx_array_push(&r->cache->keys);
     if (key == NULL) {
         return NGX_ERROR;
     }
-
     flcf = ngx_http_get_module_loc_conf(r, ngx_http_fastcgi_module);
-
+	//根据&flcf->cache_key复杂表达式结构，获取其代表的目标值，存入key.
     if (ngx_http_complex_value(r, &flcf->cache_key, key) != NGX_OK) {
         return NGX_ERROR;
     }
-
     return NGX_OK;
 }
 
@@ -1030,6 +1029,8 @@ static ngx_int_t
 ngx_http_fastcgi_process_header(ngx_http_request_t *r)
 {//解析FCGI的请求返回记录，如果是返回标准输出，则解析其请求的HTTP头部并回调其头部数据的回调。数据部分还没有解析。
 //ngx_http_upstream_process_header会每次读取数据后，调用这里。
+//请注意这个函数执行完，不一定是所有BODY数据也读取完毕了，可能是包含HTTP HEADER的某个FCGI包读取完毕了，然后进行解析的时候
+//ngx_http_parse_header_line函数碰到了\r\n\r\n于是返回NGX_HTTP_PARSE_HEADER_DONE，然后本函数就执行完成。
     u_char                         *p, *msg, *start, *last,
                                    *part_start, *part_end;
     size_t                          size;
@@ -1050,7 +1051,7 @@ ngx_http_fastcgi_process_header(ngx_http_request_t *r)
     u = r->upstream;
 
     for ( ;; ) {
-        if (f->state < ngx_http_fastcgi_st_data) {//上次的状态都没有读完一个头部,先解析这些头部看看是不是有问题你。
+        if (f->state < ngx_http_fastcgi_st_data) {//上次的状态都没有读完一个头部,先解析这些头部看看是不是有问题。
             f->pos = u->buffer.pos;
             f->last = u->buffer.last;
             rc = ngx_http_fastcgi_process_record(r, f);//简单处理了一下FCGI的请求头部，没有解析头部的类型含义，以及其里面的协议
@@ -1087,7 +1088,7 @@ ngx_http_fastcgi_process_header(ngx_http_request_t *r)
             u->buffer.pos = u->buffer.last;
             return NGX_AGAIN;//返回继续读取
         }
-//到这里，表示一个请求的徒步已经读取完毕。下面可以进行分析了
+//到这里，表示一个请求的头部已经读取完毕。下面可以进行分析了
         /* f->state == ngx_http_fastcgi_st_data */
         if (f->type == NGX_HTTP_FASTCGI_STDERR) {//出问题了
             if (f->length) {//如果是标准错误输出头，则length记录器数据长度，也就是content长度
@@ -2374,7 +2375,7 @@ ngx_http_fastcgi_pass(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
         sc.values = &flcf->fastcgi_values;
         sc.variables = n;
         sc.complete_lengths = 1;
-        sc.complete_values = 1;
+        sc.complete_values = 1;//启用脚本引擎进行简析，其简析的code等放入fastcgi_lengths和fastcgi_values
         if (ngx_http_script_compile(&sc) != NGX_OK) {
             return NGX_CONF_ERROR;
         }
@@ -2385,6 +2386,7 @@ ngx_http_fastcgi_pass(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     ngx_memzero(&u, sizeof(ngx_url_t));
     u.url = value[1];
     u.no_resolve = 1;
+	//当做单个server的upstream加入到upstream里面
     flcf->upstream.upstream = ngx_http_upstream_add(cf, &u, 0);
     if (flcf->upstream.upstream == NULL) {
         return NGX_CONF_ERROR;

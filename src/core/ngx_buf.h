@@ -100,7 +100,7 @@ struct ngx_output_chain_ctx_s {
     ngx_pool_t                  *pool;
     ngx_int_t                    allocated;
     ngx_bufs_t                   bufs;
-    ngx_buf_tag_t                tag;
+    ngx_buf_tag_t                tag; //&ngx_http_fastcgi_module;
 
     ngx_output_chain_filter_pt   output_filter;//Ϊngx_chain_writer , ngx_http_output_filter ,ngx_http_next_filter
     void                        *filter_ctx;

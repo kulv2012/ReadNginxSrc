@@ -2466,9 +2466,7 @@ ngx_http_empty_handler(ngx_event_t *wev)
 void
 ngx_http_request_empty_handler(ngx_http_request_t *r)
 {
-    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "http request empty handler");
-
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "http request empty handler");
     return;
 }
 
