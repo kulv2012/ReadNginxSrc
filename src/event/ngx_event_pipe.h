@@ -38,16 +38,16 @@ struct ngx_event_pipe_s {
     /*
      * the input filter i.e. that moves HTTP/1.1 chunks
      * from the raw bufs to an incoming chain
-     */
-    ngx_event_pipe_input_filter_pt    input_filter;//这个filter就是输出内容到client的函数，一般设置为ngx_chain_writer， FCGI为ngx_http_fastcgi_input_filter
+     *///FCGI为ngx_http_fastcgi_input_filter，其他为ngx_event_pipe_copy_input_filter 。用来解析特定格式数据
+    ngx_event_pipe_input_filter_pt    input_filter;
     void                             *input_ctx;
 
     ngx_event_pipe_output_filter_pt   output_filter;//ngx_http_output_filter输出filter
     void                             *output_ctx;
 
-    unsigned           read:1;
+    unsigned           read:1;//标记是否读了数据。
     unsigned           cacheable:1;
-    unsigned           single_buf:1;
+    unsigned           single_buf:1;//如果使用了NGX_USE_AIO_EVENT异步IO标志，则设置为1
     unsigned           free_bufs:1;
     unsigned           upstream_done:1;
     unsigned           upstream_error:1;
@@ -57,8 +57,9 @@ struct ngx_event_pipe_s {
     unsigned           downstream_error:1;
     unsigned           cyclic_temp_file:1;
 
-    ngx_int_t          allocated;//配合bufs使用，表示已经分配了的buf的个数
-    ngx_bufs_t         bufs;//对应xxx_buffers,也就是读取后端的数据时的bufer大小以及个数
+    ngx_int_t          allocated;//表示已经分配了的bufs的个数，每次会++
+    ngx_bufs_t         bufs;//fastcgi_buffers等指令设置的nginx用来缓存body的内存块数目以及大小。ngx_conf_set_bufs_slot函数会解析这样的配置。
+    				//对应xxx_buffers,也就是读取后端的数据时的bufer大小以及个数
     ngx_buf_tag_t      tag;
 
     ssize_t            busy_size;
@@ -75,7 +76,7 @@ struct ngx_event_pipe_s {
     ngx_pool_t        *pool;
     ngx_log_t         *log;
 
-    ngx_chain_t       *preread_bufs;
+    ngx_chain_t       *preread_bufs;//指读取upstream的时候多读的，或者说预读的body部分数据。p->preread_bufs->buf = &u->buffer;
     size_t             preread_size;
     ngx_buf_t         *buf_to_file;
 

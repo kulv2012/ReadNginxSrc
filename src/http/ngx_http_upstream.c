@@ -1749,7 +1749,7 @@ static void ngx_http_upstream_send_response(ngx_http_request_t *r, ngx_http_upst
     ngx_event_pipe_t          *p;
     ngx_connection_t          *c;
     ngx_http_core_loc_conf_t  *clcf;
-
+	//先发header，再发body
     rc = ngx_http_send_header(r);//调用每一个filter过滤，处理头部数据。最后将数据发送给客户端。调用ngx_http_top_header_filter
     if (rc == NGX_ERROR || rc > NGX_OK || r->post_action) {
         ngx_http_upstream_finalize_request(r, u, rc);
@@ -1775,8 +1775,8 @@ static void ngx_http_upstream_send_response(ngx_http_request_t *r, ngx_http_upst
         r->request_body->temp_file->file.fd = NGX_INVALID_FILE;
     }
     clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
-    if (!u->buffering) {//注意buffering模式不能用于FCGI，FCGI写死为1.因为FCGI是包式的传输。非流式
-//buffering只nginx是反应该先buffer 后端FCGI发过来的数据，然后一次发送给客户端。
+    if (!u->buffering) {//FCGI写死为1.因为FCGI是包式的传输。非流式，不能接一点，发一点。在ngx_http_fastcgi_handler里面设置为1了。
+//buffering指nginx 会先buffer后端FCGI发过来的数据，然后一次发送给客户端。
 //默认这个是打开的。也就是nginx会buf住upstream发送的数据。这样效率会更高。
         if (u->input_filter == NULL) {//如果input_filter为空，则设置默认的filter，然后准备发送数据到客户端。然后试着读读FCGI
             u->input_filter_init = ngx_http_upstream_non_buffered_filter_init;//实际上为空函数
@@ -1889,14 +1889,15 @@ static void ngx_http_upstream_send_response(ngx_http_request_t *r, ngx_http_upst
         ngx_http_file_cache_free(r->cache, u->pipe->temp_file);
     }
 #endif //缓存文件处理完成。
+//下面进入event_pipe过程，pipe==水泵，beng···
     p = u->pipe;
     p->output_filter = (ngx_event_pipe_output_filter_pt) ngx_http_output_filter;//设置filter，可以看到就是http的输出filter
     p->output_ctx = r;
     p->tag = u->output.tag;
-    p->bufs = u->conf->bufs;//设置bufs，它就是upstream中设置的bufs
+    p->bufs = u->conf->bufs;//设置bufs，它就是upstream中设置的bufs.u == &flcf->upstream;
     p->busy_size = u->conf->busy_buffers_size;
-    p->upstream = u->peer.connection;
-    p->downstream = c;
+    p->upstream = u->peer.connection;//赋值跟后端upstream的连接。
+    p->downstream = c;//赋值跟客户端的连接。
     p->pool = r->pool;
     p->log = c->log;
 
@@ -1918,6 +1919,9 @@ static void ngx_http_upstream_send_response(ngx_http_request_t *r, ngx_http_upst
     }
     p->max_temp_file_size = u->conf->max_temp_file_size;
     p->temp_file_write_size = u->conf->temp_file_write_size;
+
+	//下面申请一个缓冲链接节点，来存储刚才我们再读取fcgi的包，为了得到HTTP headers的时候不小心多读取到的数据。
+	//其实只要FCGI发给后端的包中，有一个包的前半部分是header,后一部分是body，就会有预读数据。
     p->preread_bufs = ngx_alloc_chain_link(r->pool);
     if (p->preread_bufs == NULL) {
         ngx_http_upstream_finalize_request(r, u, 0);
@@ -1962,9 +1966,12 @@ static void ngx_http_upstream_send_response(ngx_http_request_t *r, ngx_http_upst
     p->read_timeout = u->conf->read_timeout;
     p->send_timeout = clcf->send_timeout;
     p->send_lowat = clcf->send_lowat;
+	//下面的u->read***是这样被调用的: c->read->handler = ngx_http_upstream_handler;设置这个连接上的读写句柄是upstream_handler
+	//u->read_event_handler = XXXX;//upstream自己记着当前自己有事件来的时候应该怎么读，读什么。
     u->read_event_handler = ngx_http_upstream_process_upstream;//设置读事件结构，是用来处理超时，关闭连接等用的。
+    //下面的r->write***是这样被调用的:c->write->handler = ngx_http_request_handler;r->write_event_handler = XXX;//
     r->write_event_handler = ngx_http_upstream_process_downstream;//设置可写事件结构。这样就可以给客户端发送数据了。
-    //发动一下数据读取吧。
+    //发动一下数据读取吧。以后有数据可读的时候也会调用这里的。
     ngx_http_upstream_process_upstream(r, u);
 }
 
@@ -2201,7 +2208,8 @@ ngx_http_upstream_process_downstream(ngx_http_request_t *r)
 
 static void
 ngx_http_upstream_process_upstream(ngx_http_request_t *r, ngx_http_upstream_t *u)
-{
+{//这是在有buffering的情况下使用的函数。
+//ngx_http_upstream_send_response调用这里发动一下数据读取吧。以后有数据可读的时候也会调用这里的。设置到了u->read_event_handler了。
     ngx_connection_t  *c;
     c = u->peer.connection;
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, c->log, 0, "http upstream process upstream");
@@ -2209,7 +2217,8 @@ ngx_http_upstream_process_upstream(ngx_http_request_t *r, ngx_http_upstream_t *u
     if (c->read->timedout) {//如果超时了
         u->pipe->upstream_error = 1;
         ngx_connection_error(c, NGX_ETIMEDOUT, "upstream timed out");
-    } else {//请求没有超时，那么对后端，处理一下读事件。
+    } else {
+    //请求没有超时，那么对后端，处理一下读事件。ngx_event_pipe开始处理
         if (ngx_event_pipe(u->pipe, 0) == NGX_ABORT) {
             ngx_http_upstream_finalize_request(r, u, 0);
             return;

@@ -606,6 +606,8 @@ ngx_http_proxy_handler(ngx_http_request_t *r)
     if (u->pipe == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
+	//设置在有buffering的状态下，nginx读取upstream的回调，如果是FCGI，则是对应的回调ngx_http_fastcgi_input_filter用来解析FCGI协议的数据。
+	//如果我们要实现我们自己的协议格式，那就用对应的解析方式。
     u->pipe->input_filter = ngx_event_pipe_copy_input_filter;
     u->accel = 1;
 	//准备读取请求的body部分，读取完毕后立马调用ngx_http_upstream_init开始处理啦

@@ -579,14 +579,14 @@ ngx_http_fastcgi_handler(ngx_http_request_t *r)
     u->process_header = ngx_http_fastcgi_process_header;
     u->abort_request = ngx_http_fastcgi_abort_request;
     u->finalize_request = ngx_http_fastcgi_finalize_request;
-
+	
+	//下面的数据结构是给event_pipe用的，用来对FCGI的数据进行buffering处理的。FCGI写死为buffering
     u->buffering = 1;
-
     u->pipe = ngx_pcalloc(r->pool, sizeof(ngx_event_pipe_t));
     if (u->pipe == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
-
+	//设置读取fcgi协议格式数据的回调，当解析完带有\r\n\r\n的头部的FCGI包后，后面的包解析都由这个函数进行处理。
     u->pipe->input_filter = ngx_http_fastcgi_input_filter;
     u->pipe->input_ctx = r;
 
@@ -1330,7 +1330,7 @@ ngx_http_fastcgi_process_header(ngx_http_request_t *r)
 
 static ngx_int_t
 ngx_http_fastcgi_input_filter(ngx_event_pipe_t *p, ngx_buf_t *buf)
-{
+{//这个函数在ngx_http_fastcgi_handler里面设置为p->input_filter，在FCGI给nginx发送数据的时候调用，解析FCGI的数据。
     u_char                  *m, *msg;
     ngx_int_t                rc;
     ngx_buf_t               *b, **prev;

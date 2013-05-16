@@ -1167,7 +1167,7 @@ ngx_conf_set_sec_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
 char *
 ngx_conf_set_bufs_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
-{
+{//处理fastcgi_buffers等指令。读取bufs的个数，以及每个的大小。
     char *p = conf;
 
     ngx_str_t   *value;

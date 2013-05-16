@@ -20,13 +20,15 @@ static ngx_inline void ngx_event_pipe_free_shadow_raw_buf(ngx_chain_t **free,
 static ngx_int_t ngx_event_pipe_drain_chains(ngx_event_pipe_t *p);
 
 
-ngx_int_t
-ngx_event_pipe(ngx_event_pipe_t *p, ngx_int_t do_write)
-{//ngx_event_pipe将upstream响应发送回客户端
+ngx_int_t ngx_event_pipe(ngx_event_pipe_t *p, ngx_int_t do_write)
+{//在有buffering的时候，使用event_pipe进行数据的转发，
+//ngx_event_pipe将upstream响应发送回客户端。do_write代表是否要往客户端发送，写数据。
+//如果设置了，那么会先发给客户端，再读upstream数据，当然，如果读取了数据，也会调用这里的。
     u_int         flags;
     ngx_int_t     rc;
     ngx_event_t  *rev, *wev;
 
+//这个for循环是不断的用ngx_event_pipe_read_upstream读取客户端数据，然后调用ngx_event_pipe_write_to_downstream
     for ( ;; ) {
         if (do_write) {
             p->log->action = "sending to client";
@@ -47,18 +49,18 @@ ngx_event_pipe(ngx_event_pipe_t *p, ngx_int_t do_write)
         if (!p->read && !p->upstream_blocked) {
             break;
         }
-        do_write = 1;//还要写。
+        do_write = 1;//还要写。因为我这次读到了一些数据
     }
-
+	
+//下面是处理是否需要设置定时器，或者删除读写事件的epoll。
     if (p->upstream->fd != -1) {//如果后端php等的连接fd是有效的，则注册读写事件。
-        rev = p->upstream->read;
+        rev = p->upstream->read;//得到这个连接的读写事件结构，如果其发生了错误，那么将其读写事件注册删除掉，否则保存原样。
         flags = (rev->eof || rev->error) ? NGX_CLOSE_EVENT : 0;
         if (ngx_handle_read_event(rev, flags) != NGX_OK) {
-            return NGX_ABORT;//将一个连接加入可读事件监听中。
+            return NGX_ABORT;//看看是否需要将这个连接删除读写事件注册。
         }
-        if (rev->active && !rev->ready) {
+        if (rev->active && !rev->ready) {//没有读写数据了，那就设置一个读超时定时器
             ngx_add_timer(rev, p->read_timeout);
-
         } else if (rev->timer_set) {
             ngx_del_timer(rev);
         }
@@ -69,7 +71,7 @@ ngx_event_pipe(ngx_event_pipe_t *p, ngx_int_t do_write)
             return NGX_ABORT;
         }
         if (!wev->delayed) {
-            if (wev->active && !wev->ready) {
+            if (wev->active && !wev->ready) {//同样，注册一下超时。
                 ngx_add_timer(wev, p->send_timeout);
             } else if (wev->timer_set) {
                 ngx_del_timer(wev);
@@ -82,7 +84,7 @@ ngx_event_pipe(ngx_event_pipe_t *p, ngx_int_t do_write)
 
 static ngx_int_t
 ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
-{
+{//ngx_event_pipe调用这里读取后端的数据。
     ssize_t       n, size;
     ngx_int_t     rc;
     ngx_buf_t    *b;
@@ -91,120 +93,64 @@ ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
     if (p->upstream_eof || p->upstream_error || p->upstream_done) {
         return NGX_OK;
     }
-
-    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, p->log, 0,
-                   "pipe read upstream: %d", p->upstream->read->ready);
+    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, p->log, 0, "pipe read upstream: %d", p->upstream->read->ready);
 
     for ( ;; ) {
-
         if (p->upstream_eof || p->upstream_error || p->upstream_done) {
-            break;
+            break;//状态判断。
         }
-
+		//如果没有预读数据，并且跟upstream的连接还没有read，那就可以退出了，因为没数据可读。
         if (p->preread_bufs == NULL && !p->upstream->read->ready) {
             break;
         }
-
-        if (p->preread_bufs) {
-
+		//下面这个大的if-else就干一件事情: 寻找一块空闲的内存缓冲区，用来待会存放读取进来的upstream的数据。
+		//如果preread_bufs不为空，就先用之，否则看看free_raw_bufs有没有，或者申请一块
+        if (p->preread_bufs) {//如果预读数据有的话，比如第一次进来，连接尚未可读，但是之前读到了一部分body。
             /* use the pre-read bufs if they exist */
-
-            chain = p->preread_bufs;
+            chain = p->preread_bufs;//那就将这个块的数据链接起来。并清空preread_bufs
             p->preread_bufs = NULL;
             n = p->preread_size;
-
-            ngx_log_debug1(NGX_LOG_DEBUG_EVENT, p->log, 0,
-                           "pipe preread: %z", n);
-
+            ngx_log_debug1(NGX_LOG_DEBUG_EVENT, p->log, 0,  "pipe preread: %z", n);
             if (n) {
-                p->read = 1;
+                p->read = 1;//读了数据。
             }
-
-        } else {
-
-#if (NGX_HAVE_KQUEUE)
-
-            /*
-             * kqueue notifies about the end of file or a pending error.
-             * This test allows not to allocate a buf on these conditions
-             * and not to call c->recv_chain().
-             */
-
-            if (p->upstream->read->available == 0
-                && p->upstream->read->pending_eof)
-            {
-                p->upstream->read->ready = 0;
-                p->upstream->read->eof = 0;
-                p->upstream_eof = 1;
-                p->read = 1;
-
-                if (p->upstream->read->kq_errno) {
-                    p->upstream->read->error = 1;
-                    p->upstream_error = 1;
-                    p->upstream_eof = 0;
-
-                    ngx_log_error(NGX_LOG_ERR, p->log,
-                                  p->upstream->read->kq_errno,
-                                  "kevent() reported that upstream "
-                                  "closed connection");
-                }
-
-                break;
-            }
+        } else {//否则，preread_bufs为空，没有了。
+#if (NGX_HAVE_KQUEUE)//中间删除了。不考虑。
 #endif
-
             if (p->free_raw_bufs) {
-
                 /* use the free bufs if they exist */
-
                 chain = p->free_raw_bufs;
-                if (p->single_buf) {
+                if (p->single_buf) {//如果设置了NGX_USE_AIO_EVENT标志，这个不太明白，后续看一下
                     p->free_raw_bufs = p->free_raw_bufs->next;
                     chain->next = NULL;
                 } else {
                     p->free_raw_bufs = NULL;
                 }
-
             } else if (p->allocated < p->bufs.num) {
-
+            //如果没有超过fastcgi_buffers等指令的限制，那么申请一块内存吧。因为现在没有了。
                 /* allocate a new buf if it's still allowed */
-
                 b = ngx_create_temp_buf(p->pool, p->bufs.size);
                 if (b == NULL) {
                     return NGX_ABORT;
                 }
-
                 p->allocated++;
-
-                chain = ngx_alloc_chain_link(p->pool);
+                chain = ngx_alloc_chain_link(p->pool);//申请一个链表结构，指向刚申请的那坨buf,这个buf 比较大的。几十K以上。
                 if (chain == NULL) {
                     return NGX_ABORT;
                 }
-
                 chain->buf = b;
                 chain->next = NULL;
-
-            } else if (!p->cacheable
-                       && p->downstream->data == p->output_ctx
-                       && p->downstream->write->ready
-                       && !p->downstream->write->delayed)
-            {
+            } else if (!p->cacheable && p->downstream->data == p->output_ctx && p->downstream->write->ready && !p->downstream->write->delayed) {
+			//到这里，那说明没法申请内存了，但是配置里面没要求必须先保留在cache里，那我们可以吧当前的数据发送给客户端了。跳出循环。
                 /*
                  * if the bufs are not needed to be saved in a cache and
                  * a downstream is ready then write the bufs to a downstream
                  */
-
                 p->upstream_blocked = 1;
-
-                ngx_log_debug0(NGX_LOG_DEBUG_EVENT, p->log, 0,
-                               "pipe downstream ready");
-
+                ngx_log_debug0(NGX_LOG_DEBUG_EVENT, p->log, 0, "pipe downstream ready");
                 break;
-
-            } else if (p->cacheable
-                       || p->temp_file->offset < p->max_temp_file_size)
-            {
-
+            } else if (p->cacheable || p->temp_file->offset < p->max_temp_file_size)
+            {//必须缓存，而且当前的缓存文件的位移，就是大小小于可允许的大小，那good，可以写入文件了。
                 /*
                  * if it is allowed, then save some bufs from r->in
                  * to a temporary file, and add them to a r->out chain
@@ -244,20 +190,15 @@ ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
                     p->free_raw_bufs = NULL;
                 }
 
-            } else {
-
+            } else {//没办法了。
                 /* there are no bufs to read in */
-
-                ngx_log_debug0(NGX_LOG_DEBUG_EVENT, p->log, 0,
-                               "no pipe bufs to read in");
-
+                ngx_log_debug0(NGX_LOG_DEBUG_EVENT, p->log, 0,  "no pipe bufs to read in");
                 break;
             }
-
+			//到这里，肯定是找到空闲的buf了，chain指向之了。先睡觉，电脑没电了。
             n = p->upstream->recv_chain(p->upstream, chain);
 
-            ngx_log_debug1(NGX_LOG_DEBUG_EVENT, p->log, 0,
-                           "pipe recv chain: %z", n);
+            ngx_log_debug1(NGX_LOG_DEBUG_EVENT, p->log, 0, "pipe recv chain: %z", n);
 
             if (p->free_raw_bufs) {
                 chain->next = p->free_raw_bufs;
@@ -283,7 +224,7 @@ ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
                 p->upstream_eof = 1;
                 break;
             }
-        }
+        }//从上面for循环刚开始的if (p->preread_bufs) {到这里，都在寻找一个空闲的缓冲区，用来在下面读取数据。够长的。
 
         p->read_length += n;
         cl = chain;
@@ -785,9 +726,7 @@ ngx_event_pipe_write_chain_to_temp_file(ngx_event_pipe_t *p)
 
 
 /* the copy input filter */
-
-ngx_int_t
-ngx_event_pipe_copy_input_filter(ngx_event_pipe_t *p, ngx_buf_t *buf)
+ngx_int_t ngx_event_pipe_copy_input_filter(ngx_event_pipe_t *p, ngx_buf_t *buf)
 {
     ngx_buf_t    *b;
     ngx_chain_t  *cl;
@@ -795,20 +734,17 @@ ngx_event_pipe_copy_input_filter(ngx_event_pipe_t *p, ngx_buf_t *buf)
     if (buf->pos == buf->last) {
         return NGX_OK;
     }
-
     if (p->free) {
         cl = p->free;
         b = cl->buf;
         p->free = cl->next;
         ngx_free_chain(p->pool, cl);
-
     } else {
         b = ngx_alloc_buf(p->pool);
         if (b == NULL) {
             return NGX_ERROR;
         }
     }
-
     ngx_memcpy(b, buf, sizeof(ngx_buf_t));
     b->shadow = buf;
     b->tag = p->tag;

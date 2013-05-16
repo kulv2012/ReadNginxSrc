@@ -266,7 +266,8 @@ struct ngx_http_upstream_s {//±¾½á¹¹ÌåÓÃÀ´±£´æÒ»¸öÁ¬½ÓµÄupstreamĞÅÏ¢£¬°üÀ¨¸÷ÖÖĞè
 
     ngx_http_upstream_resolved_t    *resolved;//½âÎö³öÀ´µÄfastcgi_pass   127.0.0.1:9000;ºóÃæµÄ×Ö·û´®ÄÚÈİ£¬¿ÉÄÜÓĞ±äÁ¿Âï¡£
 
-    ngx_buf_t                        buffer;///¶ÁÈ¡ÉÏÓÎ·µ»ØµÄÊı¾İµÄ»º³åÇø
+    ngx_buf_t                        buffer;///¶ÁÈ¡ÉÏÓÎ·µ»ØµÄÊı¾İµÄ»º³åÇø£¬Ò²¾ÍÊÇproxy£¬FCGI·µ»ØµÄÊı¾İ¡£ÕâÀïÃæÓĞhttpÍ·²¿£¬Ò²¿ÉÄÜÓĞbody²¿·Ö¡£
+    									//Æäbody²¿·Ö»á¸úevent_pipe_tµÄpreread_bufs½á¹¹¶ÔÓ¦ÆğÀ´¡£¾ÍÊÇÔ¤¶ÁµÄbuf£¬ÆäÊµÊÇi²»Ğ¡ĞÄ¶Áµ½µÄ¡£
     size_t                           length;//Òª·¢ËÍ¸ø¿Í»§¶ËµÄÊı¾İ´óĞ¡
 
     ngx_chain_t                     *out_bufs;//Õâ¸öÊÇÒª·¢ËÍ¸ø¿Í»§¶ËµÄÊı¾İÁ´½Ó±íå?
@@ -308,7 +309,7 @@ struct ngx_http_upstream_s {//±¾½á¹¹ÌåÓÃÀ´±£´æÒ»¸öÁ¬½ÓµÄupstreamĞÅÏ¢£¬°üÀ¨¸÷ÖÖĞè
     unsigned                         cache_status:3;
 #endif
 
-    unsigned                         buffering:1;
+    unsigned                         buffering:1;//ÊÇ·ñÒªbuffer ºó¶ËµÄÊı¾İ£¬Èç¹ûÒªÓÃevent_pipeµÄ·½Ê½·¢ËÍÊı¾İ
 
     unsigned                         request_sent:1;//ÊÇ·ñÒÑ¾­½«request_bufsµÄÊı¾İ·ÅÈëÊä³öÁ´±íÀïÃæ
     unsigned                         header_sent:1;//±ê¼ÇÒÑ¾­·¢ËÍÁËÍ·²¿×Ö¶Î¡£
