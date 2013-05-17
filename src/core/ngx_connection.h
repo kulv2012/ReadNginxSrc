@@ -113,7 +113,7 @@ struct ngx_connection_s {
 
     ngx_recv_pt         recv;//这个连接上的读写回调，ngx_event_accept接受这个连接的时候赋值ngx_unix_recv
     ngx_send_pt         send;//ngx_unix_send
-    ngx_recv_chain_pt   recv_chain; //ngx_readv_chain .
+    ngx_recv_chain_pt   recv_chain; //ngx_readv_chain .调用readv不断的读取连接的数据。
     ngx_send_chain_pt   send_chain;//ngx_writev_chain
     ngx_listening_t    *listening;//我的上级监听SOCK，很多连接会指向一个监听LISTENING结构
 

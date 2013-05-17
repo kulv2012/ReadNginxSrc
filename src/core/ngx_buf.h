@@ -26,7 +26,8 @@ struct ngx_buf_s {
     u_char          *end;           /* end of buffer */
     ngx_buf_tag_t    tag;
     ngx_file_t      *file;
-    ngx_buf_t       *shadow;
+    ngx_buf_t       *shadow;//shadow会将buf组成一条链表。用last_shadow标记表明是否是某个大裸FCGI数据块中的最后一个。通过p->in等指向头部。
+    //这里容易混淆，以为last_shadow指的是整个链表的最后一个，其实不是，这个链表中可能是属于几个大FCGI数据块，就有几个为1的。具体参考ngx_event_pipe_drain_chains
 
 
     /* the buf's content could be changed */
@@ -48,7 +49,7 @@ struct ngx_buf_s {
     unsigned         last_buf:1;
     unsigned         last_in_chain:1;
 
-    unsigned         last_shadow:1;
+    unsigned         last_shadow:1;//这个代表的是，我这个data数据块是不是属于裸FCGI数据块的最后一个，如果是，那我的shadow指向这个大数据块。否则指向下一个data节点。
     unsigned         temp_file:1;
 
     /* STUB */ int   num;

@@ -67,8 +67,8 @@ http://www.pagefault.info/?p=46
     /* aio operation is complete */
     unsigned         complete:1;
 
-    unsigned         eof:1;
-    unsigned         error:1;
+    unsigned         eof:1;//对端是否发送了FIN包，在readv返回0的时候代表FIN
+    unsigned         error:1;//连接是否有错误发生
 
     unsigned         timedout:1;
     unsigned         timer_set:1;
@@ -468,6 +468,7 @@ extern ngx_event_actions_t   ngx_event_actions;
 #define ngx_del_timer        ngx_event_del_timer
 
 
+//这个ngx_io为OS相关的忘了IO操作句柄结构，一般设置为ngx_os_io 
 extern ngx_os_io_t  ngx_io;
 
 #define ngx_recv             ngx_io.recv

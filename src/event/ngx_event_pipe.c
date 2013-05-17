@@ -43,9 +43,11 @@ ngx_int_t ngx_event_pipe(ngx_event_pipe_t *p, ngx_int_t do_write)
         p->read = 0;
         p->upstream_blocked = 0;
         p->log->action = "reading upstream";
+		//´Óupstream¶ÁÈ¡Êý¾Ýµ½chainµÄÁ´±íÀïÃæ£¬È»ºóÕû¿éÕû¿éµÄµ÷ÓÃinput_filter½øÐÐÐ­ÒéµÄ½âÎö£¬²¢½«HTTP½á¹û´æ·ÅÔÚp->in£¬p->last_inµÄÁ´±íÀïÃæ¡£
         if (ngx_event_pipe_read_upstream(p) == NGX_ABORT) {
             return NGX_ABORT;
         }
+		//upstream_blockedÊÇÔÚngx_event_pipe_read_upstreamÀïÃæÉèÖÃµÄ±äÁ¿,´ú±íÊÇ·ñÓÐÊý¾ÝÒÑ¾­´Óupstream¶ÁÈ¡ÁË¡£
         if (!p->read && !p->upstream_blocked) {
             break;
         }
@@ -80,10 +82,15 @@ ngx_int_t ngx_event_pipe(ngx_event_pipe_t *p, ngx_int_t do_write)
     }
     return NGX_OK;
 }
+/*
+1.´Ópreread_bufs£¬free_raw_bufs»òÕßngx_create_temp_bufÑ°ÕÒÒ»¿é¿ÕÏÐµÄ»ò²¿·Ö¿ÕÏÐµÄÄÚ´æ£»
+2.µ÷ÓÃp->upstream->recv_chain==ngx_readv_chain£¬ÓÃwritevµÄ·½Ê½¶ÁÈ¡FCGIµÄÊý¾Ý,Ìî³ächain¡£
+3.¶ÔÓÚÕû¿ébuf¶¼ÂúÁËµÄchain½Úµãµ÷ÓÃinput_filter(ngx_http_fastcgi_input_filter)½øÐÐupstreamÐ­Òé½âÎö£¬±ÈÈçFCGIÐ­Òé£¬½âÎöºóµÄ½á¹û·ÅÈëp->inÀïÃæ£»
+4.¶ÔÓÚÃ»ÓÐÌî³äÂúµÄbuffer½Úµã£¬·ÅÈëfree_raw_bufsÒÔ´ýÏÂ´Î½øÈëÊ±´ÓºóÃæ½øÐÐ×·¼Ó¡£
+5.µ±È»ÁË£¬Èç¹û¶Ô¶Ë·¢ËÍÍêÊý¾ÝFINÁË£¬ÄÇ¾ÍÖ±½Óµ÷ÓÃinput_filter´¦Àífree_raw_bufsÕâ¿éÊý¾Ý¡£
+*/
 
-
-static ngx_int_t
-ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
+static ngx_int_t ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
 {//ngx_event_pipeµ÷ÓÃÕâÀï¶ÁÈ¡ºó¶ËµÄÊý¾Ý¡£
     ssize_t       n, size;
     ngx_int_t     rc;
@@ -105,9 +112,9 @@ ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
         }
 		//ÏÂÃæÕâ¸ö´óµÄif-else¾Í¸ÉÒ»¼þÊÂÇé: Ñ°ÕÒÒ»¿é¿ÕÏÐµÄÄÚ´æ»º³åÇø£¬ÓÃÀ´´ý»á´æ·Å¶ÁÈ¡½øÀ´µÄupstreamµÄÊý¾Ý¡£
 		//Èç¹ûpreread_bufs²»Îª¿Õ£¬¾ÍÏÈÓÃÖ®£¬·ñÔò¿´¿´free_raw_bufsÓÐÃ»ÓÐ£¬»òÕßÉêÇëÒ»¿é
-        if (p->preread_bufs) {//Èç¹ûÔ¤¶ÁÊý¾ÝÓÐµÄ»°£¬±ÈÈçµÚÒ»´Î½øÀ´£¬Á¬½ÓÉÐÎ´¿É¶Á£¬µ«ÊÇÖ®Ç°¶Áµ½ÁËÒ»²¿·Öbody¡£
+        if (p->preread_bufs) {//Èç¹ûÔ¤¶ÁÊý¾ÝÓÐµÄ»°£¬±ÈÈçµÚÒ»´Î½øÀ´£¬Á¬½ÓÉÐÎ´¿É¶Á£¬µ«ÊÇÖ®Ç°¶Áµ½ÁËÒ»²¿·Öbody¡£ÄÇ¾ÍÏÈ´¦ÀíÍêÕâ¸öbodyÔÙ½øÐÐ¶ÁÈ¡¡£
             /* use the pre-read bufs if they exist */
-            chain = p->preread_bufs;//ÄÇ¾Í½«Õâ¸ö¿éµÄÊý¾ÝÁ´½ÓÆðÀ´¡£²¢Çå¿Õpreread_bufs
+            chain = p->preread_bufs;//ÄÇ¾Í½«Õâ¸ö¿éµÄÊý¾ÝÁ´½ÓÆðÀ´,´ý»áÓÃÀ´´æ·Å¶ÁÈëµÄÊý¾Ý¡£²¢Çå¿Õpreread_bufs,
             p->preread_bufs = NULL;
             n = p->preread_size;
             ngx_log_debug1(NGX_LOG_DEBUG_EVENT, p->log, 0,  "pipe preread: %z", n);
@@ -146,7 +153,7 @@ ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
                  * if the bufs are not needed to be saved in a cache and
                  * a downstream is ready then write the bufs to a downstream
                  */
-                p->upstream_blocked = 1;
+                p->upstream_blocked = 1;//±ê¼ÇÒÑ¾­¶ÁÈ¡ÁËÊý¾Ý£¬¿ÉÒÔwriteÁË¡£
                 ngx_log_debug0(NGX_LOG_DEBUG_EVENT, p->log, 0, "pipe downstream ready");
                 break;
             } else if (p->cacheable || p->temp_file->offset < p->max_temp_file_size)
@@ -155,33 +162,22 @@ ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
                  * if it is allowed, then save some bufs from r->in
                  * to a temporary file, and add them to a r->out chain
                  */
-
+//ÏÂÃæ½«r->inµÄÊý¾ÝÐ´µ½ÁÙÊ±ÎÄ¼þ
                 rc = ngx_event_pipe_write_chain_to_temp_file(p);
-
-                ngx_log_debug1(NGX_LOG_DEBUG_EVENT, p->log, 0,
-                               "pipe temp offset: %O", p->temp_file->offset);
-
+                ngx_log_debug1(NGX_LOG_DEBUG_EVENT, p->log, 0,  "pipe temp offset: %O", p->temp_file->offset);
                 if (rc == NGX_BUSY) {
                     break;
                 }
-
                 if (rc == NGX_AGAIN) {
-                    if (ngx_event_flags & NGX_USE_LEVEL_EVENT
-                        && p->upstream->read->active
-                        && p->upstream->read->ready)
-                    {
-                        if (ngx_del_event(p->upstream->read, NGX_READ_EVENT, 0)
-                            == NGX_ERROR)
-                        {
+                    if (ngx_event_flags & NGX_USE_LEVEL_EVENT && p->upstream->read->active && p->upstream->read->ready){
+                        if (ngx_del_event(p->upstream->read, NGX_READ_EVENT, 0) == NGX_ERROR) {
                             return NGX_ABORT;
                         }
                     }
                 }
-
                 if (rc != NGX_OK) {
                     return rc;
                 }
-
                 chain = p->free_raw_bufs;
                 if (p->single_buf) {
                     p->free_raw_bufs = p->free_raw_bufs->next;
@@ -189,83 +185,81 @@ ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
                 } else {
                     p->free_raw_bufs = NULL;
                 }
-
             } else {//Ã»°ì·¨ÁË¡£
                 /* there are no bufs to read in */
                 ngx_log_debug0(NGX_LOG_DEBUG_EVENT, p->log, 0,  "no pipe bufs to read in");
                 break;
             }
 			//µ½ÕâÀï£¬¿Ï¶¨ÊÇÕÒµ½¿ÕÏÐµÄbufÁË£¬chainÖ¸ÏòÖ®ÁË¡£ÏÈË¯¾õ£¬µçÄÔÃ»µçÁË¡£
+			//ngx_readv_chain .µ÷ÓÃreadv²»¶ÏµÄ¶ÁÈ¡Á¬½ÓµÄÊý¾Ý¡£·ÅÈëchainµÄÁ´±íÀïÃæ
+			//ÕâÀïµÄchainÊÇ²»ÊÇÖ»ÓÐÒ»¿é? Æänext³ÉÔ±Îª¿ÕÄØ
             n = p->upstream->recv_chain(p->upstream, chain);
 
             ngx_log_debug1(NGX_LOG_DEBUG_EVENT, p->log, 0, "pipe recv chain: %z", n);
-
-            if (p->free_raw_bufs) {
+            if (p->free_raw_bufs) {//free_raw_bufs²»Îª¿Õ£¬ÄÇ¾Í½«chainÖ¸ÏòµÄÕâ¿é·Åµ½free_raw_bufsÍ·²¿¡£
                 chain->next = p->free_raw_bufs;
             }
-            p->free_raw_bufs = chain;
-
+            p->free_raw_bufs = chain;//·ÅÈëÍ·²¿
             if (n == NGX_ERROR) {
                 p->upstream_error = 1;
                 return NGX_ERROR;
             }
-
             if (n == NGX_AGAIN) {
                 if (p->single_buf) {
                     ngx_event_pipe_remove_shadow_links(chain->buf);
                 }
-
                 break;
             }
-
             p->read = 1;
-
             if (n == 0) {
                 p->upstream_eof = 1;
                 break;
             }
-        }//´ÓÉÏÃæforÑ­»·¸Õ¿ªÊ¼µÄif (p->preread_bufs) {µ½ÕâÀï£¬¶¼ÔÚÑ°ÕÒÒ»¸ö¿ÕÏÐµÄ»º³åÇø£¬ÓÃÀ´ÔÚÏÂÃæ¶ÁÈ¡Êý¾Ý¡£¹»³¤µÄ¡£
+        }//´ÓÉÏÃæforÑ­»·¸Õ¿ªÊ¼µÄif (p->preread_bufs) {µ½ÕâÀï£¬¶¼ÔÚÑ°ÕÒÒ»¸ö¿ÕÏÐµÄ»º³åÇø£¬È»ºó¶ÁÈ¡Êý¾ÝÌî³ächain¡£¹»³¤µÄ¡£
 
         p->read_length += n;
-        cl = chain;
+        cl = chain;//chainÒÑ¾­ÊÇÁ´±íµÄÍ·²¿ÁË£¬µÈÓÚfree_raw_bufsËùÒÔÏÂÃæ¿ÉÒÔÖÃ¿ÕÏÈ¡£
         p->free_raw_bufs = NULL;
 
-        while (cl && n > 0) {
+        while (cl && n > 0) {//Èç¹û»¹ÓÐÁ´±íÊý¾Ý²¢ÇÒ³¤¶È²»Îª0£¬Ò²¾ÍÊÇÕâ´ÎµÄ»¹Ã»ÓÐ´¦ÀíÍê¡£ÄÇÈç¹ûÖ®Ç°±£ÁôÓÐÒ»²¿·ÖÊý¾ÝÄØ?
+        //²»»áµÄ£¬Èç¹ûÖ®Ç°Ô¤¶ÁÁËÊý¾Ý£¬ÄÇÃ´ÉÏÃæµÄ´óifÓï¾äelseÀïÃæ½ø²»È¥£¬¾ÍÊÇ´ËÊ±µÄn¿Ï¶¨µÈÓÚpreread_bufsµÄ³¤¶Èpreread_size¡£
+        //Èç¹ûÖ®Ç°Ã»ÓÐÔ¤¶ÁÊý¾Ý£¬µ«free_raw_bufs²»Îª¿Õ£¬ÄÇÒ²Ã»¹ØÏµ£¬free_raw_bufsÀïÃæµÄÊý¾Ý¿Ï¶¨ÒÑ¾­ÔÚÏÂÃæ¼¸ÐÐ´¦Àí¹ýÁË¡£
 
+		//ÏÂÃæµÄº¯Êý½«c->bufÖÐÓÃshadowÖ¸ÕëÁ¬½ÓÆðÀ´µÄÁ´±íÖÐËùÓÐ½ÚµãµÄrecycled,temporary,shadow³ÉÔ±ÖÃ¿Õ¡£
             ngx_event_pipe_remove_shadow_links(cl->buf);
 
             size = cl->buf->end - cl->buf->last;
-
             if (n >= size) {
-                cl->buf->last = cl->buf->end;
-
-                /* STUB */ cl->buf->num = p->num++;
-
-                if (p->input_filter(p, cl->buf) == NGX_ERROR) {
+                cl->buf->last = cl->buf->end;//°ÑÕâÛçÈ«²¿ÓÃÁË¡£
+                /* STUB */ cl->buf->num = p->num++;//µÚ¼¸¿é
+				//FCGIÎªngx_http_fastcgi_input_filter£¬ÆäËûÎªngx_event_pipe_copy_input_filter ¡£ÓÃÀ´½âÎöÌØ¶¨¸ñÊ½Êý¾Ý
+                if (p->input_filter(p, cl->buf) == NGX_ERROR) {//Õû¿ébufferµÄµ÷ÓÃÐ­Òé½âÎö¾ä±ú
+                //ÕâÀïÃæ£¬Èç¹ûcl->bufÕâ¿éÊý¾Ý½âÎö³öÀ´ÁËDATAÊý¾Ý£¬ÄÇÃ´cl->buf->shadow³ÉÔ±Ö¸ÏòÒ»¸öÁ´±í£¬
+                //Í¨¹ýshadow³ÉÔ±Á´½ÓÆðÀ´µÄÁ´±í£¬Ã¿¸ö³ÉÔ±¾ÍÊÇÁãÉ¢µÄfcgi dataÊý¾Ý²¿·Ö¡£
                     return NGX_ABORT;
                 }
-
                 n -= size;
                 ln = cl;
-                cl = cl->next;
+                cl = cl->next;//¼ÌÐø´¦ÀíÏÂÒ»¿é£¬²¢ÊÍ·ÅÕâ¸ö½Úµã¡£
                 ngx_free_chain(p->pool, ln);
 
-            } else {
-                cl->buf->last += n;
-                n = 0;
+            } else {//Èç¹ûÕâ¸ö½ÚµãµÄ¿ÕÏÐÄÚ´æÊýÄ¿´óÓÚÊ£ÏÂÒª´¦ÀíµÄ£¬¾Í½«Ê£ÏÂµÄ´æ·ÅÔÚÕâÀï¡£
+                cl->buf->last += n;//É¶ÒâË¼£¬²»ÓÃµ÷ÓÃinput_filterÁËÂð£¬²»ÊÇ¡£ÊÇÕâÑùµÄ£¬Èç¹ûÊ£ÏÂµÄÕâ¿éÊý¾Ý»¹²»¹»ÈûÂúµ±Ç°Õâ¸öclµÄ»º´æ´óÐ¡£¬
+                n = 0;//ÄÇ¾ÍÏÈ´æÆðÀ´£¬ÔõÃ´´æÄØ: ±ðÊÍ·ÅclÁË£¬Ö»ÊÇÒÆ¶¯Æä´óÐ¡£¬È»ºón=0Ê¹Ñ­»·ÍË³ö¡£È»ºóÔÚÏÂÃæ¼¸ÐÐµÄif (cl) {ÀïÃæ¿ÉÒÔ¼ì²âµ½ÕâÖÖÇé¿ö
+ //ÓÚÊÇÔÚÏÂÃæµÄifÀïÃæ»á½«Õâ¸öln´¦µÄÊý¾Ý·ÅÈëfree_raw_bufsµÄÍ·²¿¡£²»¹ýÕâÀï»áÓÐ¶à¸öÁ¬½ÓÂð? ¿ÉÄÜÓÐµÄ¡£
             }
         }
 
         if (cl) {
+	//½«ÉÏÃæÃ»ÓÐÌîÂúÒ»¿éÄÚ´æ¿éµÄÊý¾ÝÁ´½Ó·Åµ½free_raw_bufsµÄÇ°Ãæ¡£×¢ÒâÉÏÃæÐÞ¸ÄÁËcl->buf->last£¬ºóÐøµÄ¶ÁÈëÊý¾Ý²»»á¸²¸ÇÕâÐ©Êý¾ÝµÄ¡£¿´ngx_readv_chain
             for (ln = cl; ln->next; ln = ln->next) { /* void */ }
-
-            ln->next = p->free_raw_bufs;
-            p->free_raw_bufs = cl;
+            ln->next = p->free_raw_bufs;//Õâ¸ö²»ÊÇNULLÂð£¬ÉÏÃæ³õÊ¼»¯µÄ£¬²»¶Ô£¬ÒòÎªinput_filter¿ÉÄÜ»á½«ÄÇÐ©Ã»ÓÃdata²¿·ÖµÄfcgiÊý¾Ý°ü¿é·ÅÈëfree_raw_bufsÖ±½Ó½øÐÐ¸´ÓÃ¡£
+            p->free_raw_bufs = cl;//ÕâÑùÔÚÏÂÒ»´ÎÑ­»·µÄÊ±ºò£¬Ò²¾ÍÊÇÉÏÃæ£¬»áÊ¹ÓÃfree_raw_bufsµÄ¡£
+            //²¢ÇÒ£¬Èç¹ûÑ­»·½áÊøÁË£¬»áÔÚÏÂÃæÔÙ´¦ÀíÒ»ÏÂÕâ¸öÎ²²¿Ã»ÓÐÌîÂúÕû¸ö¿éµÄÊý¾Ý¡£
         }
-    }
+    }//forÑ­»·½áÊø¡£
 
 #if (NGX_DEBUG)
-
     for (cl = p->busy; cl; cl = cl->next) {
         ngx_log_debug8(NGX_LOG_DEBUG_EVENT, p->log, 0,
                        "pipe buf busy s:%d t:%d f:%d "
@@ -320,25 +314,26 @@ ngx_event_pipe_read_upstream(ngx_event_pipe_t *p)
 
 #endif
 
-    if ((p->upstream_eof || p->upstream_error) && p->free_raw_bufs) {
-
+    if ((p->upstream_eof || p->upstream_error) && p->free_raw_bufs) {//Ã»°ì·¨ÁË£¬¶¼¿ìµ½Í·ÁË£¬»òÕß³öÏÖ´íÎóÁË£¬ËùÒÔ´¦ÀíÒ»ÏÂÕâ¿é²»ÍêÕûµÄbuffer
         /* STUB */ p->free_raw_bufs->buf->num = p->num++;
+		//Èç¹ûÊý¾Ý¶ÁÈ¡Íê±ÏÁË£¬»òÕßºó¶Ë³öÏÖÎÊÌâÁË£¬²¢ÇÒ£¬free_raw_bufs²»Îª¿Õ£¬ºóÃæ»¹ÓÐÒ»²¿·ÖÊý¾Ý£¬
+		//µ±È»Ö»¿ÉÄÜÓÐÒ»¿é¡£ÄÇ¾Íµ÷ÓÃinput_filter´¦ÀíËü¡£FCGIÎªngx_http_fastcgi_input_filter ÔÚngx_http_fastcgi_handlerÀïÃæÉèÖÃµÄ
 
+		//ÕâÀï¿¼ÂÇÒ»ÖÖÇé¿ö: ÕâÊÇ×îºóÒ»¿éÊý¾ÝÁË£¬Ã»Âú£¬ÀïÃæÃ»ÓÐdataÊý¾Ý£¬ËùÒÔngx_http_fastcgi_input_filter»áµ÷ÓÃngx_event_pipe_add_free_bufº¯Êý£¬
+		//½«Õâ¿éÄÚ´æ·ÅÈëfree_raw_bufsµÄÇ°Ãæ£¬¿ÉÊÇ¾ý²»Öª£¬Õâ×îºóÒ»¿é²»´æÔÚÊý¾Ý²¿·ÖµÄÄÚ´æÕýºÃµÈÓÚfree_raw_bufs£¬ÒòÎªfree_raw_bufs»¹Ã»À´µÃ¼°¸Ä±ä¡£
+		//ËùÒÔ£¬¾Í°Ñ×Ô¼º¸øÌæ»»µôÁË¡£ÕâÖÖÇé¿ö»á·¢ÉúÂð?
         if (p->input_filter(p, p->free_raw_bufs->buf) == NGX_ERROR) {
             return NGX_ABORT;
         }
-
         p->free_raw_bufs = p->free_raw_bufs->next;
-
         if (p->free_bufs && p->buf_to_file == NULL) {
             for (cl = p->free_raw_bufs; cl; cl = cl->next) {
-                if (cl->buf->shadow == NULL) {
+                if (cl->buf->shadow == NULL) {//Õâ¸öshadow³ÉÔ±Ö¸ÏòÓÉÎÒÕâ¿ébuf²úÉúµÄÐ¡FCGIÊý¾Ý¿ébufµÄÖ¸ÕëÁÐ±í¡£Èç¹ûÎªNULL£¬¾ÍËµÃ÷Õâ¿ébufÃ»ÓÐdata£¬¿ÉÒÔÊÍ·ÅÁË¡£
                     ngx_pfree(p->pool, cl->buf->start);
                 }
             }
         }
     }
-
     if (p->cacheable && p->in) {
         if (ngx_event_pipe_write_chain_to_temp_file(p) == NGX_ABORT) {
             return NGX_ABORT;
@@ -360,111 +355,80 @@ ngx_event_pipe_write_to_downstream(ngx_event_pipe_t *p)
     ngx_connection_t  *downstream;
 
     downstream = p->downstream;
-
-    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, p->log, 0,
-                   "pipe write downstream: %d", downstream->write->ready);
-
+    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, p->log, 0,"pipe write downstream: %d", downstream->write->ready);
     flushed = 0;
 
     for ( ;; ) {
-        if (p->downstream_error) {
+        if (p->downstream_error) {//Èç¹û¿Í»§¶ËÁ¬½Ó³ö´íÁË¡£drain=ÅÅË®£»Á÷¸É,
+        //Çå¿Õupstream·¢¹ýÀ´µÄ£¬½âÎö¹ý¸ñÊ½ºóµÄHTMLÊý¾Ý¡£½«Æä·ÅÈëfree_raw_bufsÀïÃæ¡£
             return ngx_event_pipe_drain_chains(p);
         }
-
         if (p->upstream_eof || p->upstream_error || p->upstream_done) {
-
+			//Èç¹ûupstreamµÄÁ¬½ÓÒÑ¾­¹Ø±ÕÁË£¬»ò³öÎÊÌâÁË£¬»òÕß·¢ËÍÍê±ÏÁË£¬ÄÇ¾Í¿ÉÒÔ·¢ËÍÁË¡£
             /* pass the p->out and p->in chains to the output filter */
-
             for (cl = p->busy; cl; cl = cl->next) {
                 cl->buf->recycled = 0;
             }
 
-            if (p->out) {
-                ngx_log_debug0(NGX_LOG_DEBUG_EVENT, p->log, 0,
-                               "pipe write downstream flush out");
-
+            if (p->out) {//Êý¾ÝÐ´µ½´ÅÅÌÁË
+                ngx_log_debug0(NGX_LOG_DEBUG_EVENT, p->log, 0, "pipe write downstream flush out");
                 for (cl = p->out; cl; cl = cl->next) {
                     cl->buf->recycled = 0;
                 }
-
+				//ÏÂÃæ£¬ÒòÎªp->outµÄÁ´±íÀïÃæÒ»¿é¿é¶¼ÊÇ½âÎöºóµÄHTMLÊý¾Ý£¬ËùÒÔÖ±½Óµ÷ÓÃngx_http_output_filter½øÐÐHTMLÊý¾Ý·¢ËÍ¾ÍÐÐÁË¡£
                 rc = p->output_filter(p->output_ctx, p->out);
-
                 if (rc == NGX_ERROR) {
                     p->downstream_error = 1;
                     return ngx_event_pipe_drain_chains(p);
                 }
-
                 p->out = NULL;
             }
 
-            if (p->in) {
-                ngx_log_debug0(NGX_LOG_DEBUG_EVENT, p->log, 0,
-                               "pipe write downstream flush in");
-
+            if (p->in) {//¸úoutÍ¬Àí¡£¼òµ¥µ÷ÓÃngx_http_output_filter½øÈë¸÷¸öfilter·¢ËÍ¹ý³ÌÖÐ¡£
+                ngx_log_debug0(NGX_LOG_DEBUG_EVENT, p->log, 0, "pipe write downstream flush in");
                 for (cl = p->in; cl; cl = cl->next) {
                     cl->buf->recycled = 0;
                 }
-
                 rc = p->output_filter(p->output_ctx, p->in);
-
                 if (rc == NGX_ERROR) {
                     p->downstream_error = 1;
                     return ngx_event_pipe_drain_chains(p);
                 }
-
                 p->in = NULL;
             }
-
+			//Èç¹ûÒª»º´æ£¬ÄÇ¾ÍÐ´Èëµ½ÎÄ¼þÀïÃæÈ¥¡£
             if (p->cacheable && p->buf_to_file) {
-
                 file.buf = p->buf_to_file;
                 file.next = NULL;
-
-                if (ngx_write_chain_to_temp_file(p->temp_file, &file)
-                    == NGX_ERROR)
-                {
+                if (ngx_write_chain_to_temp_file(p->temp_file, &file) == NGX_ERROR){
                     return NGX_ABORT;
                 }
             }
 
-            ngx_log_debug0(NGX_LOG_DEBUG_EVENT, p->log, 0,
-                           "pipe write downstream done");
-
+            ngx_log_debug0(NGX_LOG_DEBUG_EVENT, p->log, 0, "pipe write downstream done");
             /* TODO: free unused bufs */
-
             p->downstream_done = 1;
             break;
         }
 
-        if (downstream->data != p->output_ctx
-            || !downstream->write->ready
-            || downstream->write->delayed)
-        {
+		//·ñÔòupstreamÊý¾Ý»¹Ã»ÓÐ·¢ËÍÍê±Ï¡£
+        if (downstream->data != p->output_ctx || !downstream->write->ready || downstream->write->delayed) {
             break;
         }
-
         /* bsize is the size of the busy recycled bufs */
-
         prev = NULL;
         bsize = 0;
-
         for (cl = p->busy; cl; cl = cl->next) {
-
             if (cl->buf->recycled) {
                 if (prev == cl->buf->start) {
                     continue;
                 }
-
                 bsize += cl->buf->end - cl->buf->start;
                 prev = cl->buf->start;
             }
         }
-
-        ngx_log_debug1(NGX_LOG_DEBUG_EVENT, p->log, 0,
-                       "pipe write busy: %uz", bsize);
-
+        ngx_log_debug1(NGX_LOG_DEBUG_EVENT, p->log, 0, "pipe write busy: %uz", bsize);
         out = NULL;
-
         if (bsize >= (size_t) p->busy_size) {
             flush = 1;
             goto flush;
@@ -477,16 +441,11 @@ ngx_event_pipe_write_to_downstream(ngx_event_pipe_t *p)
         for ( ;; ) {
             if (p->out) {
                 cl = p->out;
-
-                if (cl->buf->recycled
-                    && bsize + cl->buf->last - cl->buf->pos > p->busy_size)
-                {
+                if (cl->buf->recycled && bsize + cl->buf->last - cl->buf->pos > p->busy_size) {
                     flush = 1;
                     break;
                 }
-
                 p->out = p->out->next;
-
                 ngx_event_pipe_free_shadow_raw_buf(&p->free_raw_bufs, cl->buf);
 
             } else if (!p->cacheable && p->in) {
@@ -627,11 +586,7 @@ ngx_event_pipe_write_chain_to_temp_file(ngx_event_pipe_t *p)
 
         do {
             bsize = cl->buf->last - cl->buf->pos;
-
-            ngx_log_debug3(NGX_LOG_DEBUG_EVENT, p->log, 0,
-                           "pipe buf %p, pos %p, size: %z",
-                           cl->buf->start, cl->buf->pos, bsize);
-
+            ngx_log_debug3(NGX_LOG_DEBUG_EVENT, p->log, 0, "pipe buf %p, pos %p, size: %z", cl->buf->start, cl->buf->pos, bsize);
             if ((size + bsize > p->temp_file_write_size)
                || (p->temp_file->offset + size + bsize > p->max_temp_file_size))
             {
@@ -641,7 +596,6 @@ ngx_event_pipe_write_chain_to_temp_file(ngx_event_pipe_t *p)
             size += bsize;
             ll = &cl->next;
             cl = cl->next;
-
         } while (cl);
 
         ngx_log_debug1(NGX_LOG_DEBUG_EVENT, p->log, 0, "size: %z", size);
@@ -779,27 +733,21 @@ ngx_event_pipe_remove_shadow_links(ngx_buf_t *buf)
     ngx_buf_t  *b, *next;
 
     b = buf->shadow;
-
     if (b == NULL) {
         return;
     }
-
     while (!b->last_shadow) {
         next = b->shadow;
-
         b->temporary = 0;
-        b->recycled = 0;
-
-        b->shadow = NULL;
+        b->recycled = 0;//±ê¼ÇÎª»ØÊÕµÄ ·
+        b->shadow = NULL;//°Ñshadow³ÉÔ±ÖÃ¿Õ¡£
         b = next;
     }
 
     b->temporary = 0;
     b->recycled = 0;
     b->last_shadow = 0;
-
     b->shadow = NULL;
-
     buf->shadow = NULL;
 }
 
@@ -835,15 +783,14 @@ ngx_event_pipe_free_shadow_raw_buf(ngx_chain_t **free, ngx_buf_t *buf)
 
 ngx_int_t
 ngx_event_pipe_add_free_buf(ngx_event_pipe_t *p, ngx_buf_t *b)
-{
+{//½«²ÎÊýµÄb´ú±íµÄÊý¾Ý¿é¹ÒÈëfree_raw_bufsµÄ¿ªÍ·»òÕßµÚ¶þ¸öÎ»ÖÃ¡£bÎªÉÏ²ã¾õµÃÃ»ÓÃÁËµÄÊý¾Ý¿é¡£
     ngx_chain_t  *cl;
-
+//ÕâÀï²»»á³öÏÖb¾ÍµÈÓÚfree_raw_bufs->bufµÄÇé¿öÂð
     cl = ngx_alloc_chain_link(p->pool);
     if (cl == NULL) {
         return NGX_ERROR;
     }
-
-    b->pos = b->start;
+    b->pos = b->start;//ÖÃ¿ÕÕâÛçÊý¾Ý
     b->last = b->start;
     b->shadow = NULL;
 
@@ -852,64 +799,64 @@ ngx_event_pipe_add_free_buf(ngx_event_pipe_t *p, ngx_buf_t *b)
     if (p->free_raw_bufs == NULL) {
         p->free_raw_bufs = cl;
         cl->next = NULL;
-
         return NGX_OK;
     }
-
+	//¿´ÏÂÃæµÄ×¢ÊÍ£¬ÒâË¼ÊÇ£¬Èç¹û×îÇ°ÃæµÄfree_raw_bufsÖÐÃ»ÓÐÊý¾Ý£¬ÄÇ¾Í°Éµ±Ç°Õâ¿éÊý¾Ý·ÅÈëÍ·²¿¾ÍÐÐ¡£
+	//·ñÔòÈç¹ûµ±Ç°free_raw_bufsÓÐÊý¾Ý£¬ÄÇ¾ÍµÃ·Åµ½ÆäºóÃæÁË¡£ÎªÊ²Ã´»áÓÐÊý¾ÝÄØ?±ÈÈç£¬¶ÁÈ¡Ò»Ð©Êý¾Ýºó£¬»¹Ê£ÏÂÒ»¸öÎ²°Í´æ·ÅÔÚfree_raw_bufs£¬È»ºó¿ªÊ¼Íù¿Í»§¶ËÐ´Êý¾Ý
+	//Ð´Íêºó£¬×ÔÈ»Òª°ÑÃ»ÓÃµÄbuffer·ÅÈëµ½ÕâÀïÃæÀ´¡£Õâ¸öÊÇÔÚngx_event_pipe_write_to_downstreamÀïÃæ×öµÄ¡£»òÕß¸É´àÔÚngx_event_pipe_drain_chainsÀïÃæ×ö¡£
+	//ÒòÎªÕâ¸öº¯ÊýÔÚinpupt_filterÀïÃæµ÷ÓÃÊÇ´ÓÊý¾Ý¿é¿ªÊ¼´¦Àí£¬È»ºóµ½ºóÃæµÄ£¬
+	//²¢ÇÒÔÚµ÷ÓÃinput_filterÖ®Ç°ÊÇ»á½«free_raw_bufsÖÃ¿ÕµÄ¡£Ó¦¸ÃÊÇÆäËûµØ·½Ò²ÓÐµ÷ÓÃ¡£
     if (p->free_raw_bufs->buf->pos == p->free_raw_bufs->buf->last) {
-
         /* add the free buf to the list start */
-
         cl->next = p->free_raw_bufs;
         p->free_raw_bufs = cl;
-
         return NGX_OK;
     }
-
     /* the first free buf is partialy filled, thus add the free buf after it */
-
     cl->next = p->free_raw_bufs->next;
     p->free_raw_bufs->next = cl;
-
     return NGX_OK;
 }
 
 
 static ngx_int_t
 ngx_event_pipe_drain_chains(ngx_event_pipe_t *p)
-{
+{//±éÀúp->in/out/busy£¬½«ÆäÁ´±íËùÊôµÄÂãFCGIÊý¾Ý¿éÊÍ·Å£¬·ÅÈëµ½free_raw_bufsÖÐ¼äÈ¥¡£Ò²¾ÍÊÇ£¬Çå¿Õupstream·¢¹ýÀ´µÄ£¬½âÎö¹ý¸ñÊ½ºóµÄHTMLÊý¾Ý¡£
     ngx_chain_t  *cl, *tl;
 
     for ( ;; ) {
         if (p->busy) {
             cl = p->busy;
             p->busy = NULL;
-
         } else if (p->out) {
             cl = p->out;
             p->out = NULL;
-
         } else if (p->in) {
             cl = p->in;
             p->in = NULL;
-
         } else {
             return NGX_OK;
         }
-
-        while (cl) {
-            if (cl->buf->last_shadow) {
+		//ÕÒµ½¶ÔÓ¦µÄÁ´±í
+        while (cl) {/*ÒªÖªµÀ£¬ÕâÀïclÀïÃæ£¬±ÈÈçp->inÀïÃæµÄÕâÐ©ngx_buf_t½á¹¹ËùÖ¸ÏòµÄÊý¾ÝÄÚ´æÊµ¼ÊÉÏÊÇÔÚ
+        ngx_event_pipe_read_upstreamÀïÃæµÄinput_filter½øÐÐÐ­Òé½âÎöµÄÊ±ºòÉèÖÃÎª¸ú´Ó¿Í»§¶Ë¶ÁÈ¡Êý¾ÝÊ±µÄbuf¹«ÓÃµÄ£¬Ò²¾ÍÊÇËùÎ½µÄÓ°×Ó¡£
+		È»ºó£¬ËäÈ»p->inÖ¸ÏòµÄÁ´±íÀïÃæÓÐºÜ¶àºÜ¶à¸ö½Úµã£¬Ã¿¸ö½Úµã´ú±íÒ»¿éHTML´úÂë£¬µ«ÊÇËûÃÇ²¢²»ÊÇ¶ÀÕ¼Ò»¿éÄÚ´æµÄ£¬¶øÊÇ¿ÉÄÜ¹²ÏíµÄ£¬
+		±ÈÈçÒ»¿é´óµÄbuffer£¬ÀïÃæÓÐ3¸öFCGIµÄSTDOUTÊý¾Ý°ü£¬¶¼ÓÐdata²¿·Ö£¬ÄÇÃ´½«´æÔÚ3¸öbµÄ½ÚµãÁ´½Óµ½p->inµÄÄ©Î²£¬ËûÃÇµÄshadow³ÉÔ±
+		·Ö±ðÖ¸ÏòÏÂÒ»¸ö½Úµã£¬×îºóÒ»¸ö½Úµã¾ÍÖ¸ÏòÆäËùÊôµÄ´óÄÚ´æ½á¹¹¡£¾ßÌåÔÚngx_http_fastcgi_input_filterÊµÏÖ¡£
+        */
+            if (cl->buf->last_shadow) {//Åöµ½ÁËÄ³¸ö´óFCGIÊý¾Ý¿éµÄ×îºóÒ»¸ö½Úµã£¬ÊÍ·ÅÖ»£¬È»ºó½øÈëÏÂÒ»¸ö´ó¿éÀïÃæµÄÄ³¸öÐ¡html Êý¾Ý¿é¡£
                 if (ngx_event_pipe_add_free_buf(p, cl->buf->shadow) != NGX_OK) {
                     return NGX_ABORT;
                 }
-
                 cl->buf->last_shadow = 0;
             }
 
             cl->buf->shadow = NULL;
             tl = cl->next;
-            cl->next = p->free;
+			
+            cl->next = p->free;//°ÑclÕâ¸öÐ¡buf½Úµã·ÅÈëp->free£¬¹©ngx_http_fastcgi_input_filter½øÐÐÖØ¸´Ê¹ÓÃ¡£
             p->free = cl;
+			
             cl = tl;
         }
     }

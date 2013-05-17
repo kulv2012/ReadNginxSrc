@@ -26,10 +26,14 @@ struct ngx_event_pipe_s {
     ngx_connection_t  *downstream;//这个表示客户端的连接
 
     ngx_chain_t       *free_raw_bufs;//保存了从upstream读取的数据(没有经过任何处理的)，以及缓存的buf.
-    ngx_chain_t       *in;
-    ngx_chain_t      **last_in;
+    ngx_chain_t       *in;//每次读取数据后，调用input_filter对协议格式进行解析，解析完后的数据部分放到in里面形成一个链表。
+    /*关于p->in和shadow，多说一下，in指向一堆chain链表，每个链表指向一块实实在在的fcgi DATA数据，多个这样的html代码块共享一块大的裸FCGI数据块；
+    属于某个大的裸FCGI数据块的最后一个数据节点的last_shadow成员为1，表示我是这个大FCGI数据块的最后一个，并且我的shadow指针指向这个裸FCGI数据块的buf指针
+	释放这些大数据块的时候，可以参考ngx_event_pipe_drain_chains进行释放。
+    */
+    ngx_chain_t      **last_in;//上面的in结构的最后一个节点的next指针的地址，p->last_in = &cl->next;，这样就可以将新分析到的FCGI数据链接到后面了。
 
-    ngx_chain_t       *out;//buf到tempfile的数据会放到out中
+    ngx_chain_t       *out;//buf到tempfile的数据会放到out里面。在ngx_event_pipe_write_chain_to_temp_file函数里面设置的。
     ngx_chain_t      **last_out;
 
     ngx_chain_t       *free;
@@ -39,7 +43,7 @@ struct ngx_event_pipe_s {
      * the input filter i.e. that moves HTTP/1.1 chunks
      * from the raw bufs to an incoming chain
      *///FCGI为ngx_http_fastcgi_input_filter，其他为ngx_event_pipe_copy_input_filter 。用来解析特定格式数据
-    ngx_event_pipe_input_filter_pt    input_filter;
+    ngx_event_pipe_input_filter_pt    input_filter;//这个用来解析对应协议的数据。比如解析FCGI协议的数据。
     void                             *input_ctx;
 
     ngx_event_pipe_output_filter_pt   output_filter;//ngx_http_output_filter输出filter
@@ -52,7 +56,7 @@ struct ngx_event_pipe_s {
     unsigned           upstream_done:1;
     unsigned           upstream_error:1;
     unsigned           upstream_eof:1;
-    unsigned           upstream_blocked:1;
+    unsigned           upstream_blocked:1;//ngx_event_pipe用来标记是否读取了upstream的数据来决定是不是要write
     unsigned           downstream_done:1;
     unsigned           downstream_error:1;
     unsigned           cyclic_temp_file:1;
@@ -64,7 +68,7 @@ struct ngx_event_pipe_s {
 
     ssize_t            busy_size;
 
-    off_t              read_length;
+    off_t              read_length;//从upstream读取的数据长度
 
     off_t              max_temp_file_size;
     ssize_t            temp_file_write_size;

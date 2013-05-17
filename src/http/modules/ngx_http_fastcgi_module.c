@@ -1331,6 +1331,7 @@ ngx_http_fastcgi_process_header(ngx_http_request_t *r)
 static ngx_int_t
 ngx_http_fastcgi_input_filter(ngx_event_pipe_t *p, ngx_buf_t *buf)
 {//这个函数在ngx_http_fastcgi_handler里面设置为p->input_filter，在FCGI给nginx发送数据的时候调用，解析FCGI的数据。
+//ngx_event_pipe_read_upstream调用这里，来把已经读取的数据进行FCGI协议解析。
     u_char                  *m, *msg;
     ngx_int_t                rc;
     ngx_buf_t               *b, **prev;
@@ -1341,153 +1342,115 @@ ngx_http_fastcgi_input_filter(ngx_event_pipe_t *p, ngx_buf_t *buf)
     if (buf->pos == buf->last) {
         return NGX_OK;
     }
-
     r = p->input_ctx;
-    f = ngx_http_get_module_ctx(r, ngx_http_fastcgi_module);
+    f = ngx_http_get_module_ctx(r, ngx_http_fastcgi_module);//得到这个请求的协议上下文，比如我们这个包是第一个预读的包，那么现在的pos肯定不为0，而是位于中间部分。
 
     b = NULL;
-    prev = &buf->shadow;
-
+    prev = &buf->shadow;//当前这个buf
     f->pos = buf->pos;
     f->last = buf->last;
 
     for ( ;; ) {
-        if (f->state < ngx_http_fastcgi_st_data) {
-
+		//小于ngx_http_fastcgi_st_data状态的比较好处理，读，解析吧。后面就只有data,padding 2个状态了。
+        if (f->state < ngx_http_fastcgi_st_data) {//还不是在处理数据的过程中。前面还有协议头部
+        //下面简单处理一下FCGI的头部，将信息赋值到f的type,length,padding成员上。
             rc = ngx_http_fastcgi_process_record(r, f);
-
             if (rc == NGX_AGAIN) {
-                break;
+                break;//没数据了，等待读取
             }
-
             if (rc == NGX_ERROR) {
                 return NGX_ERROR;
             }
-
-            if (f->type == NGX_HTTP_FASTCGI_STDOUT && f->length == 0) {
-                f->state = ngx_http_fastcgi_st_version;
+            if (f->type == NGX_HTTP_FASTCGI_STDOUT && f->length == 0) {//如果协议头表示是标准输出，并且长度为0，那就是说明没有内容
+                f->state = ngx_http_fastcgi_st_version;//又从下一个包头开始，也就是版本号。
                 p->upstream_done = 1;
-
-                ngx_log_debug0(NGX_LOG_DEBUG_HTTP, p->log, 0,
-                               "http fastcgi closed stdout");
-
+                ngx_log_debug0(NGX_LOG_DEBUG_HTTP, p->log, 0, "http fastcgi closed stdout");
                 continue;
             }
 
-            if (f->type == NGX_HTTP_FASTCGI_END_REQUEST) {
+            if (f->type == NGX_HTTP_FASTCGI_END_REQUEST) {//FCGI发送了关闭连接的请求。
                 f->state = ngx_http_fastcgi_st_version;
                 p->upstream_done = 1;
-
-                ngx_log_debug0(NGX_LOG_DEBUG_HTTP, p->log, 0,
-                               "http fastcgi sent end request");
-
+                ngx_log_debug0(NGX_LOG_DEBUG_HTTP, p->log, 0, "http fastcgi sent end request");
                 break;
             }
         }
-
-
-        if (f->state == ngx_http_fastcgi_st_padding) {
-
-            if (f->pos + f->padding < f->last) {
+	
+        if (f->state == ngx_http_fastcgi_st_padding) {//下面是读取padding的阶段，
+            if (f->pos + f->padding < f->last) {//而正好当前缓冲区后面有足够的padding长度，那就直接用它，然后标记到下一个状态，继续处理吧
                 f->state = ngx_http_fastcgi_st_version;
                 f->pos += f->padding;
-
                 continue;
             }
-
-            if (f->pos + f->padding == f->last) {
+            if (f->pos + f->padding == f->last) {//刚好结束，那就退出循环，完成一块数据的解析。
                 f->state = ngx_http_fastcgi_st_version;
-
                 break;
             }
-
             f->padding -= f->last - f->pos;
-
             break;
         }
-
-
+//到这里，就只有读取数据部分了。
         /* f->state == ngx_http_fastcgi_st_data */
-
-        if (f->type == NGX_HTTP_FASTCGI_STDERR) {
-
-            if (f->length) {
-
-                if (f->pos == f->last) {
+        if (f->type == NGX_HTTP_FASTCGI_STDERR) {//这是标准错误输出，nginx会怎么处理呢，打印一条日志就行了。
+            if (f->length) {//代表数据长度
+                if (f->pos == f->last) {//后面没东西了，还需要下次再读取一点数据才能继续了
                     break;
                 }
-
                 msg = f->pos;
-
-                if (f->pos + f->length <= f->last) {
+                if (f->pos + f->length <= f->last) {//错误信息已经全部读取到了，
                     f->pos += f->length;
                     f->length = 0;
-                    f->state = ngx_http_fastcgi_st_padding;
-
+                    f->state = ngx_http_fastcgi_st_padding;//下一步去处理padding
                 } else {
                     f->length -= f->last - f->pos;
                     f->pos = f->last;
                 }
-
-                for (m = f->pos - 1; msg < m; m--) {
+                for (m = f->pos - 1; msg < m; m--) {//从错误信息的后面往前面扫，直到找到一个部位\r,\n . 空格 的字符为止，也就是过滤后面的这些字符吧。
                     if (*m != LF && *m != CR && *m != '.' && *m != ' ') {
                         break;
                     }
-                }
-
-                ngx_log_error(NGX_LOG_ERR, p->log, 0,
-                              "FastCGI sent in stderr: \"%*s\"",
-                              m + 1 - msg, msg);
-
+                }//就用来打印个日志。没其他的。
+                ngx_log_error(NGX_LOG_ERR, p->log, 0, "FastCGI sent in stderr: \"%*s\"", m + 1 - msg, msg);
                 if (f->pos == f->last) {
                     break;
                 }
-
             } else {
                 f->state = ngx_http_fastcgi_st_version;
             }
-
             continue;
         }
-
-
+		//到这里就是标准的输出啦，也就是网页内容。
         /* f->type == NGX_HTTP_FASTCGI_STDOUT */
-
         if (f->pos == f->last) {
             break;
         }
-
         if (p->free) {
             b = p->free->buf;
             p->free = p->free->next;
-
         } else {
             b = ngx_alloc_buf(p->pool);
             if (b == NULL) {
                 return NGX_ERROR;
             }
         }
-
+		//用这个新的缓存描述结构，指向buf这块内存里面的标准输出数据部分
         ngx_memzero(b, sizeof(ngx_buf_t));
-
-        b->pos = f->pos;
-        b->start = buf->start;
+        b->pos = f->pos;//从pos到end
+        b->start = buf->start;//b 跟buf共享一块客户端发送过来的数据。这就是shadow的地方， 类似影子?
         b->end = buf->end;
         b->tag = p->tag;
         b->temporary = 1;
         b->recycled = 1;
-
-        *prev = b;
-        prev = &b->shadow;
-
+	//在函数开始处，prev = &buf->shadow;下面就用buf->shadow指向了这块新分配的b描述结构，其实数据是分开的，只是2个描述结构指向同一个buffer
+        *prev = b;//实际上，这里第一次是将&buf->shadow指向b，没什么用，因为没人指向&buf->shadow自己。而对于所有的shadow，我们可以通过p->in组成链表的。不断追加在后面
+        prev = &b->shadow;//这里用最开始的buf，也就是客户端接收到数据的那块数据buf的shadow成员，形成一个链表，里面每个元素都是FCGI的一个包的data部分数据。
+//下面将当前分析得到的FCGI数据data部分放入p->in的链表里面。
         cl = ngx_alloc_chain_link(p->pool);
         if (cl == NULL) {
             return NGX_ERROR;
         }
-
         cl->buf = b;
         cl->next = NULL;
-
         if (p->in) {
             *p->last_in = cl;
         } else {
@@ -1495,60 +1458,46 @@ ngx_http_fastcgi_input_filter(ngx_event_pipe_t *p, ngx_buf_t *buf)
         }
         p->last_in = &cl->next;
 
-
+		//同样，拷贝一下数据块序号。不过这里注意，buf可能包含好几个FCGI协议数据块，
+		//那就可能存在多个in里面的b->num等于一个相同的buf->num.不要认为是一一映射。
         /* STUB */ b->num = buf->num;
-
-        ngx_log_debug2(NGX_LOG_DEBUG_EVENT, p->log, 0,
-                       "input buf #%d %p", b->num, b->pos);
-
-        if (f->pos + f->length < f->last) {
-
+        ngx_log_debug2(NGX_LOG_DEBUG_EVENT, p->log, 0, "input buf #%d %p", b->num, b->pos);
+        if (f->pos + f->length < f->last) {//如果数据足够长，那修改一下f->pos，和f->state从而进入下一个数据包的处理。数据已经放入了p->in了的。
             if (f->padding) {
                 f->state = ngx_http_fastcgi_st_padding;
             } else {
                 f->state = ngx_http_fastcgi_st_version;
             }
-
             f->pos += f->length;
             b->last = f->pos;
-
             continue;
         }
-
-        if (f->pos + f->length == f->last) {
-
+        if (f->pos + f->length == f->last) {//正好等于。下面可能需要读取padding，否则进入下一个数据包处理。
             if (f->padding) {
                 f->state = ngx_http_fastcgi_st_padding;
             } else {
                 f->state = ngx_http_fastcgi_st_version;
             }
-
             b->last = f->last;
-
             break;
         }
-
+		//到这里，表示当前读取到的数据还少了，不够一个完整包的，那就用完这一点，然后返回，
+		//等待下次event_pipe的时候再次read_upstream来读取一些数据再处理了。
         f->length -= f->last - f->pos;
-
         b->last = f->last;
-
         break;
-
-    }
-
-    if (b) {
-        b->shadow = buf;
-        b->last_shadow = 1;
-
-        ngx_log_debug2(NGX_LOG_DEBUG_EVENT, p->log, 0,
-                       "input buf %p %z", b->pos, b->last - b->pos);
-
+    }//for循环结束。这个循环结束的条件为当前的buf数据已经全部处理完毕。
+	
+    if (b) {//刚才已经解析到了数据部分。
+        b->shadow = buf;//将最后一块数据的shadow指向这块用来存放读入的裸FCGI数据块。干嘛用的呢，只是指向一下吗? 
+        //不是，这里的shadow成员正好用来存储: 我这个b所在的大buf 的指针，这样通过不断遍历p->in我是可以找出这些小data部分的b所在的大数据块的。
+        //具体看ngx_event_pipe_drain_chains里面.
+        b->last_shadow = 1;//标记这是最后一块。
+        ngx_log_debug2(NGX_LOG_DEBUG_EVENT, p->log, 0, "input buf %p %z", b->pos, b->last - b->pos);
         return NGX_OK;
     }
-
     /* there is no data record in the buf, add it to free chain */
-
-    if (ngx_event_pipe_add_free_buf(p, buf) != NGX_OK) {
+    if (ngx_event_pipe_add_free_buf(p, buf) != NGX_OK) {//将buf挂入free_raw_bufs头部或者第二个位置，如果第一个位置有数据的话。
         return NGX_ERROR;
     }
 
