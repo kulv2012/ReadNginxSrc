@@ -1332,6 +1332,7 @@ static ngx_int_t
 ngx_http_fastcgi_input_filter(ngx_event_pipe_t *p, ngx_buf_t *buf)
 {//这个函数在ngx_http_fastcgi_handler里面设置为p->input_filter，在FCGI给nginx发送数据的时候调用，解析FCGI的数据。
 //ngx_event_pipe_read_upstream调用这里，来把已经读取的数据进行FCGI协议解析。
+//这个函数处理一块FCGI数据buf，外层会循环调用的。
     u_char                  *m, *msg;
     ngx_int_t                rc;
     ngx_buf_t               *b, **prev;
@@ -1343,7 +1344,8 @@ ngx_http_fastcgi_input_filter(ngx_event_pipe_t *p, ngx_buf_t *buf)
         return NGX_OK;
     }
     r = p->input_ctx;
-    f = ngx_http_get_module_ctx(r, ngx_http_fastcgi_module);//得到这个请求的协议上下文，比如我们这个包是第一个预读的包，那么现在的pos肯定不为0，而是位于中间部分。
+	//得到这个请求的协议上下文，比如我们这个包是第一个预读的包，那么现在的pos肯定不为0，而是位于中间部分。
+    f = ngx_http_get_module_ctx(r, ngx_http_fastcgi_module);
 
     b = NULL;
     prev = &buf->shadow;//当前这个buf
@@ -1422,9 +1424,9 @@ ngx_http_fastcgi_input_filter(ngx_event_pipe_t *p, ngx_buf_t *buf)
 		//到这里就是标准的输出啦，也就是网页内容。
         /* f->type == NGX_HTTP_FASTCGI_STDOUT */
         if (f->pos == f->last) {
-            break;
+            break;//正好没有数据，返回
         }
-        if (p->free) {
+        if (p->free) {//从free空闲ngx_buf_t结构中取一个
             b = p->free->buf;
             p->free = p->free->next;
         } else {
@@ -1433,14 +1435,14 @@ ngx_http_fastcgi_input_filter(ngx_event_pipe_t *p, ngx_buf_t *buf)
                 return NGX_ERROR;
             }
         }
-		//用这个新的缓存描述结构，指向buf这块内存里面的标准输出数据部分
+		//用这个新的缓存描述结构，指向buf这块内存里面的标准输出数据部分，注意这里并没有拷贝数据，而是用b指向了f->pos也就是buf的某个数据地方。
         ngx_memzero(b, sizeof(ngx_buf_t));
         b->pos = f->pos;//从pos到end
         b->start = buf->start;//b 跟buf共享一块客户端发送过来的数据。这就是shadow的地方， 类似影子?
         b->end = buf->end;
         b->tag = p->tag;
         b->temporary = 1;
-        b->recycled = 1;
+        b->recycled = 1;//设置为需要回收的标志，这样在发送数据时，会考虑回收这块内存的。为什么要设置为1呢，那buffer在哪呢
 	//在函数开始处，prev = &buf->shadow;下面就用buf->shadow指向了这块新分配的b描述结构，其实数据是分开的，只是2个描述结构指向同一个buffer
         *prev = b;//实际上，这里第一次是将&buf->shadow指向b，没什么用，因为没人指向&buf->shadow自己。而对于所有的shadow，我们可以通过p->in组成链表的。不断追加在后面
         prev = &b->shadow;//这里用最开始的buf，也就是客户端接收到数据的那块数据buf的shadow成员，形成一个链表，里面每个元素都是FCGI的一个包的data部分数据。
@@ -1456,7 +1458,7 @@ ngx_http_fastcgi_input_filter(ngx_event_pipe_t *p, ngx_buf_t *buf)
         } else {
             p->in = cl;
         }
-        p->last_in = &cl->next;
+        p->last_in = &cl->next;//记住最后一块
 
 		//同样，拷贝一下数据块序号。不过这里注意，buf可能包含好几个FCGI协议数据块，
 		//那就可能存在多个in里面的b->num等于一个相同的buf->num.不要认为是一一映射。
@@ -1470,7 +1472,7 @@ ngx_http_fastcgi_input_filter(ngx_event_pipe_t *p, ngx_buf_t *buf)
             }
             f->pos += f->length;
             b->last = f->pos;
-            continue;
+            continue;//接收这块数据，继续下一块
         }
         if (f->pos + f->length == f->last) {//正好等于。下面可能需要读取padding，否则进入下一个数据包处理。
             if (f->padding) {
@@ -1772,8 +1774,7 @@ ngx_http_fastcgi_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
     if (conf->upstream.busy_buffers_size_conf == NGX_CONF_UNSET_SIZE) {
         conf->upstream.busy_buffers_size = 2 * size;
     } else {
-        conf->upstream.busy_buffers_size =
-                                         conf->upstream.busy_buffers_size_conf;
+        conf->upstream.busy_buffers_size = conf->upstream.busy_buffers_size_conf;
     }
 
     if (conf->upstream.busy_buffers_size < size) {
@@ -1785,8 +1786,7 @@ ngx_http_fastcgi_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
         return NGX_CONF_ERROR;
     }
 
-    if (conf->upstream.busy_buffers_size
-        > (conf->upstream.bufs.num - 1) * conf->upstream.bufs.size)
+    if (conf->upstream.busy_buffers_size > (conf->upstream.bufs.num - 1) * conf->upstream.bufs.size)
     {
         ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
              "\"fastcgi_busy_buffers_size\" must be less than "

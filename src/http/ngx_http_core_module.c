@@ -1293,9 +1293,10 @@ ngx_http_core_content_phase(ngx_http_request_t *r,   ngx_http_phase_handler_t *p
     ngx_int_t  rc;
     ngx_str_t  path;
 
-    if (r->content_handler) {//如果有content_handler,就直接调用就行了.比如如果是FCGI，在遇到配置fastcgi_pass   127.0.0.1:8777;的时候
-    //会调用ngx_http_fastcgi_pass函数，注册本location的处理hander为ngx_http_fastcgi_handler。
-    //从而在ngx_http_update_location_config里面会更新content_handler指针为当前loc所对应的指针。
+    if (r->content_handler) {
+//如果有content_handler,就直接调用就行了.比如如果是FCGI，在遇到配置fastcgi_pass   127.0.0.1:8777;的时候
+//会调用ngx_http_fastcgi_pass函数，注册本location的处理hander为ngx_http_fastcgi_handler。
+//从而在ngx_http_update_location_config里面会更新content_handler指针为当前loc所对应的指针。
         r->write_event_handler = ngx_http_request_empty_handler;
         ngx_http_finalize_request(r, r->content_handler(r));
         return NGX_OK;
@@ -1717,7 +1718,6 @@ ngx_http_output_filter(ngx_http_request_t *r, ngx_chain_t *in)
     ngx_connection_t  *c;
 
     c = r->connection;
-
     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, c->log, 0,  "http output filter \"%V?%V\"", &r->uri, &r->args);
     rc = ngx_http_top_body_filter(r, in);//一个个body filter调用，最终发送出数据。第一个是ngx_http_range_body_filter
     //最后一个body filter 是ngx_http_write_filter

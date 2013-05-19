@@ -78,10 +78,12 @@ ngx_int_t ngx_http_write_filter(ngx_http_request_t *r, ngx_chain_t *in)
         }
         size += ngx_buf_size(cl->buf);
         if (cl->buf->flush || cl->buf->recycled) {
+	//如果设置了recycled属性，则需要立即发送buf。FCGI一般都设置了这个标志，
+	//因为其发送过来的数据肯定是一块一块的，不需要buffer，得马上发送释放空间才行。
             flush = 1;
         }
         if (cl->buf->last_buf) {
-            last = 1;
+            last = 1;//这是最后一块buffer.
         }
     }
     /* add the new chain to the existent one */
@@ -105,7 +107,7 @@ ngx_int_t ngx_http_write_filter(ngx_http_request_t *r, ngx_chain_t *in)
         }
         size += ngx_buf_size(cl->buf);//统计总大小。
         if (cl->buf->flush || cl->buf->recycled) {
-            flush = 1;
+            flush = 1;//只要某个地方有一个recycled或者flush，那么链表所有数据都需要发送。
         }
         if (cl->buf->last_buf) {
             last = 1;
@@ -119,10 +121,13 @@ ngx_int_t ngx_http_write_filter(ngx_http_request_t *r, ngx_chain_t *in)
      * there are the incoming bufs and the size of all bufs
      * is smaller than "postpone_output" directive
      */
+ //如果没有碰到最后一块，并且没有碰到需要recycled的地方，
+ //而且大小也没有超过缓冲postpone_output指令指定的大小，那先直接返回，不进行发送。
+ //所以看到整个nginx的buffering机制，在这里进行缓存了。然后直接返回、
     if (!last && !flush && in && size < (off_t) clcf->postpone_output) {
         return NGX_OK;
     }
-    if (c->write->delayed) {
+    if (c->write->delayed) {//delayed表示被延迟了，可能受到网速限制的原因。
         c->buffered |= NGX_HTTP_WRITE_BUFFERED;
         return NGX_AGAIN;
     }
@@ -143,7 +148,7 @@ ngx_int_t ngx_http_write_filter(ngx_http_request_t *r, ngx_chain_t *in)
         ngx_debug_point();
         return NGX_ERROR;
     }
-    if (r->limit_rate) {//如果有限速
+    if (r->limit_rate) {//如果有限速，那就重新设置一下限速的超时时间
         limit = r->limit_rate * (ngx_time() - r->start_sec + 1) - (c->sent - clcf->limit_rate_after);
         if (limit <= 0) {
             c->write->delayed = 1;
@@ -156,7 +161,7 @@ ngx_int_t ngx_http_write_filter(ngx_http_request_t *r, ngx_chain_t *in)
     } else {
         limit = 0;
     }
-    sent = c->sent;
+    sent = c->sent;//这个链接上发送出去的数据大小
     ngx_log_debug1(NGX_LOG_DEBUG_HTTP, c->log, 0, "http write filter limit %O", limit);
 	//调用writev一次发送多个缓冲区，如果没有发送完毕，则返回剩下的链接结构头部。
     chain = c->send_chain(c, r->out, limit);//放入到发送链接结构里面.也就是ngx_writev_chain函数
@@ -165,7 +170,7 @@ ngx_int_t ngx_http_write_filter(ngx_http_request_t *r, ngx_chain_t *in)
         c->error = 1;
         return NGX_ERROR;
     }
-    if (r->limit_rate) {//如果设置了速度限制
+    if (r->limit_rate) {//如果设置了速度限制，计算一下
         nsent = c->sent;
         if (clcf->limit_rate_after) {
             sent -= clcf->limit_rate_after;

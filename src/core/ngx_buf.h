@@ -16,7 +16,7 @@ typedef void *            ngx_buf_tag_t;
 
 typedef struct ngx_buf_s  ngx_buf_t;
 
-struct ngx_buf_s {
+struct ngx_buf_s {//内存的描述结构/管理结构，其start/end指向一块真正存放数据的内存。
     u_char          *pos;//当前数据读到了这里
     u_char          *last;//所有数据的末尾
     off_t            file_pos;//如果在文件中，那就表示为偏移
@@ -32,7 +32,6 @@ struct ngx_buf_s {
 
     /* the buf's content could be changed */
     unsigned         temporary:1;
-
     /*
      * the buf's content is in a memory cache or in a read only memory
      * and must not be changed
@@ -42,16 +41,15 @@ struct ngx_buf_s {
     /* the buf's content is mmap()ed and must not be changed */
     unsigned         mmap:1;
 
-    unsigned         recycled:1;
+    unsigned         recycled:1;//这个域表示我们当前的buf是需要被回收的。调用output_filter之前会设置为0.代表我这个buf是否需要回收重复利用。
     unsigned         in_file:1;//这个BUFFER存放在文件中。
-    unsigned         flush:1;
+    unsigned         flush:1;//这块内存是不是需要尽快flush给客户端，也就是是否需要尽快发送出去，ngx_http_write_filter会利用这个标志做判断。
     unsigned         sync:1;
-    unsigned         last_buf:1;
+    unsigned         last_buf:1;//是否是最后一块内存。
     unsigned         last_in_chain:1;
 
     unsigned         last_shadow:1;//这个代表的是，我这个data数据块是不是属于裸FCGI数据块的最后一个，如果是，那我的shadow指向这个大数据块。否则指向下一个data节点。
     unsigned         temp_file:1;
-
     /* STUB */ int   num;
 };
 

@@ -21,7 +21,7 @@ typedef ngx_int_t (*ngx_event_pipe_output_filter_pt)(void *data,
                                                      ngx_chain_t *chain);
 
 
-struct ngx_event_pipe_s {
+struct ngx_event_pipe_s {//nginx处理buffering机制的结构
     ngx_connection_t  *upstream;//表示nginx和client，以及和后端的两条连接
     ngx_connection_t  *downstream;//这个表示客户端的连接
 
@@ -32,12 +32,12 @@ struct ngx_event_pipe_s {
 	释放这些大数据块的时候，可以参考ngx_event_pipe_drain_chains进行释放。
     */
     ngx_chain_t      **last_in;//上面的in结构的最后一个节点的next指针的地址，p->last_in = &cl->next;，这样就可以将新分析到的FCGI数据链接到后面了。
-
+					//out 指放入文件中的buffer，其总是在in所指向的buf链表的前面，发送前先发送这个
     ngx_chain_t       *out;//buf到tempfile的数据会放到out里面。在ngx_event_pipe_write_chain_to_temp_file函数里面设置的。
     ngx_chain_t      **last_out;
 
-    ngx_chain_t       *free;
-    ngx_chain_t       *busy;
+    ngx_chain_t       *free;//这里就是那些空闲的内存节点，从busy移动过来的。注意是节点，不是buf
+    ngx_chain_t       *busy;//代表经过了output_filter过的，从out移动过来的缓存，其里面可能有已经发送完成了，因为ngx_http_write_filter会更新这写buf的
 
     /*
      * the input filter i.e. that moves HTTP/1.1 chunks
@@ -51,7 +51,7 @@ struct ngx_event_pipe_s {
 
     unsigned           read:1;//标记是否读了数据。
     unsigned           cacheable:1;
-    unsigned           single_buf:1;//如果使用了NGX_USE_AIO_EVENT异步IO标志，则设置为1
+    unsigned           single_buf:1;//如果使用了NGX_USE_AIO_EVENT异步IO标志，则设置为1，因为AIO可能会打乱shadow buffer
     unsigned           free_bufs:1;
     unsigned           upstream_done:1;
     unsigned           upstream_error:1;
@@ -66,7 +66,8 @@ struct ngx_event_pipe_s {
     				//对应xxx_buffers,也就是读取后端的数据时的bufer大小以及个数
     ngx_buf_tag_t      tag;
 
-    ssize_t            busy_size;
+    ssize_t            busy_size;//fastcgi_busy_buffers_size 指令或者其他upstream设置的大小，作用为最大的busy状态的内存总容量。
+    					//文档介绍 : mits the total size of buffers that can be busy sending a response to the client while the response is not yet fully read.
 
     off_t              read_length;//从upstream读取的数据长度
 
@@ -86,7 +87,7 @@ struct ngx_event_pipe_s {
 
     ngx_temp_file_t   *temp_file;
 
-    /* STUB */ int     num;
+    /* STUB */ int     num;//当前读取到了第几块内存
 };
 
 

@@ -191,7 +191,7 @@ ngx_chain_update_chains(ngx_chain_t **free, ngx_chain_t **busy, ngx_chain_t **ou
     }
 
     *out = NULL;
-    while (*busy) {
+    while (*busy) {//将已经发送完毕的buf更新，放入free链表里面。
         if (ngx_buf_size((*busy)->buf) != 0) {//ngx_http_write_filter函数发送的时候会更新buf的。
             break;//由于这些buffer的顺序性，如果碰到大小不等于0的，也就是数据发送到这里之后的都没有发送出去，不能释放。
         }

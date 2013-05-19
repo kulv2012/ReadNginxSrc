@@ -73,7 +73,7 @@ http://www.pagefault.info/?p=46
     unsigned         timedout:1;
     unsigned         timer_set:1;
 
-    unsigned         delayed:1;
+    unsigned         delayed:1;//请求的数据是否被delay了，比如限速了，如果这中情况超时了，没关系的。
 
     unsigned         read_discarded:1;
 

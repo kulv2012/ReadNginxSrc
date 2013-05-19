@@ -2066,7 +2066,7 @@ ngx_http_upstream_process_non_buffered_request(ngx_http_request_t *r, ngx_uint_t
         if (size && upstream->read->ready) {//当前的这块buffer还有剩余空间，并且碰巧跟UPSTREAM的连接是可读的，也就是FCGI发送了数据。
 /*为什么这里还有可读数据呢，不是已经接到FCGI的结束包了吗，因为之前只是读取完了HTTP头部,碰到\r\n\r\n后就退出了
    那问题来了，upstream怎么知道该怎么读取呢，FCGI,PROXY怎么办，看到这里我想gdb试试，于是找FCGI的buffering类似的选项，未果。查看网上信息:
-   恍然大悟，FCGI协议是无所谓buffering了，它不是流式的数据，而是包式的一个个包，所以必然不能buffering.
+   恍然大悟，FCGI协议是无所谓buffering了，它不是流式的数据，而是包式的一个个包，所以用的是buffering模式。
    http://www.ruby-forum.com/topic/197216
 Yes. It's because of FastCGI protocol internals. It splits "stream"
 into blocks max 32KB each. Each block has header info (how many bytes
@@ -2156,7 +2156,7 @@ ngx_http_upstream_non_buffered_filter(void *data, ssize_t bytes)
 
 static void
 ngx_http_upstream_process_downstream(ngx_http_request_t *r)
-{
+{//处理客户端连接的可读事件，里面只要触发ngx_event_pipe
     ngx_event_t          *wev;
     ngx_connection_t     *c;
     ngx_event_pipe_t     *p;
@@ -2166,11 +2166,10 @@ ngx_http_upstream_process_downstream(ngx_http_request_t *r)
     u = r->upstream;
     p = u->pipe;
     wev = c->write;
-
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, c->log, 0,"http upstream process downstream");
     c->log->action = "sending to client";
     if (wev->timedout) {
-        if (wev->delayed) {
+        if (wev->delayed) {//看看数据是不是因为被限流等原因二延迟了，如果这种情况是可以允许的。
             wev->timedout = 0;
             wev->delayed = 0;
             if (!wev->ready) {
@@ -2180,11 +2179,12 @@ ngx_http_upstream_process_downstream(ngx_http_request_t *r)
                 }
                 return;
             }
+			//delay了，正常进入处理读写事件就行了。
             if (ngx_event_pipe(p, wev->write) == NGX_ABORT) {
                 ngx_http_upstream_finalize_request(r, u, 0);
                 return;
             }
-        } else {
+        } else {//不是delayed了，那就是真的超时了。
             p->downstream_error = 1;
             c->timedout = 1;
             ngx_connection_error(c, NGX_ETIMEDOUT, "client timed out");
@@ -2197,6 +2197,7 @@ ngx_http_upstream_process_downstream(ngx_http_request_t *r)
             }
             return;
         }
+		//带着1的标识调用，里面函数会立即发送数据的，然后试着读取数据、
         if (ngx_event_pipe(p, 1) == NGX_ABORT) {
             ngx_http_upstream_finalize_request(r, u, 0);
             return;
@@ -2209,7 +2210,7 @@ ngx_http_upstream_process_downstream(ngx_http_request_t *r)
 static void
 ngx_http_upstream_process_upstream(ngx_http_request_t *r, ngx_http_upstream_t *u)
 {//这是在有buffering的情况下使用的函数。
-//ngx_http_upstream_send_response调用这里发动一下数据读取吧。以后有数据可读的时候也会调用这里的。设置到了u->read_event_handler了。
+//ngx_http_upstream_send_response调用这里发动一下数据读取。以后有数据可读的时候也会调用这里的。设置到了u->read_event_handler了。
     ngx_connection_t  *c;
     c = u->peer.connection;
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, c->log, 0, "http upstream process upstream");
@@ -2224,13 +2225,14 @@ ngx_http_upstream_process_upstream(ngx_http_request_t *r, ngx_http_upstream_t *u
             return;
         }
     }
+	//处理了一下是否需要吧数据写到磁盘上。
     ngx_http_upstream_process_request(r);
 }
 
 
 static void
 ngx_http_upstream_process_request(ngx_http_request_t *r)
-{
+{//里面就处理了一下cache,store的情况，吧数据写到磁盘什么的，后续再看
     ngx_uint_t            del;
     ngx_temp_file_t      *tf;
     ngx_event_pipe_t     *p;
@@ -2328,35 +2330,24 @@ ngx_http_upstream_store(ngx_http_request_t *r, ngx_http_upstream_t *u)
     ext.log = r->connection->log;
 
     if (u->headers_in.last_modified) {
-
-        lm = ngx_http_parse_time(u->headers_in.last_modified->value.data,
-                                 u->headers_in.last_modified->value.len);
-
+        lm = ngx_http_parse_time(u->headers_in.last_modified->value.data, u->headers_in.last_modified->value.len);
         if (lm != NGX_ERROR) {
             ext.time = lm;
             ext.fd = tf->file.fd;
         }
     }
-
     if (u->conf->store_lengths == NULL) {
-
         ngx_http_map_uri_to_path(r, &path, &root, 0);
-
     } else {
-        if (ngx_http_script_run(r, &path, u->conf->store_lengths->elts, 0,
-                                u->conf->store_values->elts)
-            == NULL)
+        if (ngx_http_script_run(r, &path, u->conf->store_lengths->elts, 0,  u->conf->store_values->elts) == NULL)
         {
             return;
         }
     }
-
     path.len--;
-
     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
                    "upstream stores \"%s\" to \"%s\"",
                    tf->file.name.data, path.data);
-
     (void) ngx_ext_rename_file(&tf->file.name, &path, &ext);
 }
 

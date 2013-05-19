@@ -1,6 +1,8 @@
----- ngx_event_pipe_add_free_buf Matches (5 in 3 files) ----
-Ngx_event_pipe.c (h:\dropbox\github\readnginxsrc\src\event):                if (ngx_event_pipe_add_free_buf(p, cl->buf->shadow) != NGX_OK) {
-Ngx_event_pipe.c (h:\dropbox\github\readnginxsrc\src\event):ngx_event_pipe_add_free_buf(ngx_event_pipe_t *p, ngx_buf_t *b)
-Ngx_event_pipe.c (h:\dropbox\github\readnginxsrc\src\event):                if (ngx_event_pipe_add_free_buf(p, cl->buf->shadow) != NGX_OK) {
-Ngx_event_pipe.h (h:\dropbox\github\readnginxsrc\src\event):ngx_int_t ngx_event_pipe_add_free_buf(ngx_event_pipe_t *p, ngx_buf_t *b);
-Ngx_http_fastcgi_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):    if (ngx_event_pipe_add_free_buf(p, buf) != NGX_OK) {//½«buf¹ÒÈë
+---- postpone_output Matches (9 in 3 files) ----
+Ngx_http_core_module.c (h:\dropbox\github\readnginxsrc\src\http):    { ngx_string("postpone_output"),
+Ngx_http_core_module.c (h:\dropbox\github\readnginxsrc\src\http):      offsetof(ngx_http_core_loc_conf_t, postpone_output),
+Ngx_http_core_module.c (h:\dropbox\github\readnginxsrc\src\http):    clcf->postpone_output = NGX_CONF_UNSET_SIZE;
+Ngx_http_core_module.c (h:\dropbox\github\readnginxsrc\src\http):    ngx_conf_merge_size_value(conf->postpone_output, prev->postpone_output,
+Ngx_http_core_module.h (h:\dropbox\github\readnginxsrc\src\http):    size_t        postpone_output;         /* postpone_output */
+Ngx_http_write_filter_module.c (h:\dropbox\github\readnginxsrc\src\http):     * is smaller than "postpone_output" directive
+Ngx_http_write_filter_module.c (h:\dropbox\github\readnginxsrc\src\http):    if (!last && !flush && in && size < (off_t) clcf->postpone_output) {

@@ -330,6 +330,8 @@ struct ngx_http_core_loc_conf_s {
 
     size_t        client_body_buffer_size; /* client_body_buffer_size */
     size_t        send_lowat;              /* send_lowat */
+	//Êä³ö»º´æ: If possible, the output of client data will be postponed until 
+	//ginx has at least size bytes of data to send. Value of zero disables postponing
     size_t        postpone_output;         /* postpone_output */
     size_t        limit_rate;              /* limit_rate */
     size_t        limit_rate_after;        /* limit_rate_after */

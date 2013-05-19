@@ -384,7 +384,7 @@ struct ngx_http_request_s {
     ngx_str_t                         method_name;
     ngx_str_t                         http_protocol;
 
-    ngx_chain_t                      *out;//要输出给客户端的数据的链接结构
+    ngx_chain_t                      *out;//要输出给客户端的数据的链接结构，nginx读取到数据后，会调用ngx_http_output_filter将数据过滤，然后挂到这里，随时准备发送出去。
     ngx_http_request_t               *main;//用来区分是否是subrequest
     ngx_http_request_t               *parent;
     ngx_http_postponed_request_t     *postponed;
