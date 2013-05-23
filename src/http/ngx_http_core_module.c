@@ -1556,56 +1556,43 @@ ngx_http_test_content_type(ngx_http_request_t *r, ngx_hash_t *types_hash)
 
 ngx_int_t
 ngx_http_set_content_type(ngx_http_request_t *r)
-{
+{//自动根据后缀名，如果ngx_http_core_default_types初始化了后缀，
+//这里会查找自动匹配合适的content_type，如果客户端没有发送的话。
     u_char                     c, *exten;
     ngx_str_t                 *type;
     ngx_uint_t                 i, hash;
     ngx_http_core_loc_conf_t  *clcf;
 
-    if (r->headers_out.content_type.len) {
+    if (r->headers_out.content_type.len) {//已经有了，直接返回。
         return NGX_OK;
     }
 
     clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
-
-    if (r->exten.len) {
-
+    if (r->exten.len) {//如果请求有后缀
         hash = 0;
-
-        for (i = 0; i < r->exten.len; i++) {
+        for (i = 0; i < r->exten.len; i++) {//循环用每个后缀名字符计算hash
             c = r->exten.data[i];
-
-            if (c >= 'A' && c <= 'Z') {
-
+            if (c >= 'A' && c <= 'Z') {//变成小写。
                 exten = ngx_pnalloc(r->pool, r->exten.len);
                 if (exten == NULL) {
                     return NGX_ERROR;
                 }
-
                 hash = ngx_hash_strlow(exten, r->exten.data, r->exten.len);
-
                 r->exten.data = exten;
-
                 break;
             }
-
-            hash = ngx_hash(hash, c);
+            hash = ngx_hash(hash, c);//最简单的对每个字符做hash . ((ngx_uint_t) key * 31 + c)
         }
-
-        type = ngx_hash_find(&clcf->types_hash, hash,
-                             r->exten.data, r->exten.len);
-
+		//看看是否有存在映射的。映射在这里ngx_http_core_default_types。
+        type = ngx_hash_find(&clcf->types_hash, hash, r->exten.data, r->exten.len);
         if (type) {
             r->headers_out.content_type_len = type->len;
             r->headers_out.content_type = *type;
-
             return NGX_OK;
         }
     }
-
     r->headers_out.content_type_len = clcf->default_type.len;
     r->headers_out.content_type = clcf->default_type;
-
     return NGX_OK;
 }
 
@@ -2960,9 +2947,7 @@ ngx_http_core_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
             }
 
             type->key = ngx_http_core_default_types[i].key;
-            type->key_hash =
-                       ngx_hash_key_lc(ngx_http_core_default_types[i].key.data,
-                                       ngx_http_core_default_types[i].key.len);
+            type->key_hash = ngx_hash_key_lc(ngx_http_core_default_types[i].key.data, ngx_http_core_default_types[i].key.len);
             type->value = ngx_http_core_default_types[i].value;
         }
     }

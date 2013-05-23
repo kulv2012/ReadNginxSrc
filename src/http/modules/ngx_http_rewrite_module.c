@@ -261,6 +261,7 @@ ngx_http_rewrite_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
 static ngx_int_t
 ngx_http_rewrite_init(ngx_conf_t *cf)
 {//将ngx_http_rewrite_handler句柄设置到SERVER_REWRITE_PHASE 和 REWRITE_PHASE过程中去。
+//在ngx_http_core_run_phases中就会调用ngx_http_rewrite_handler函数进行重定向等操作的。
     ngx_http_handler_pt        *h;
     ngx_http_core_main_conf_t  *cmcf;
 
@@ -269,6 +270,7 @@ ngx_http_rewrite_init(ngx_conf_t *cf)
     if (h == NULL) {
         return NGX_ERROR;
     }
+	//z注册过程处理回调函数。
     *h = ngx_http_rewrite_handler;
 
     h = ngx_array_push(&cmcf->phases[NGX_HTTP_REWRITE_PHASE].handlers);

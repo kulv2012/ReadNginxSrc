@@ -2077,7 +2077,7 @@ get the whole block from upstream.*/
                 break;
             }
             if (n > 0) {//读了一些数据，立马将它发送出去吧，也就是放入到out_bufs链表里面去，没有实际发送的，那么，什么时候发送呢
-                u->state->response_length += n;//再次调用input_filter,这里没有reset u->buffer.last,这是因为我们这个值并没有更新.
+                u->state->response_length += n;//再次调用input_filter,这里没有reset u->buffer.last,这是因为我们这个值并没有更新.注意在下面的input_filter得更新了。
                 if (u->input_filter(u->input_filter_ctx, n) == NGX_ERROR) {//就是ngx_http_upstream_non_buffered_filter
                     ngx_http_upstream_finalize_request(r, u, 0);
                     return;
@@ -3764,34 +3764,30 @@ ngx_http_upstream_add(ngx_conf_t *cf, ngx_url_t *u, ngx_uint_t flags)
 
 
 char *
-ngx_http_upstream_bind_set_slot(ngx_conf_t *cf, ngx_command_t *cmd,
-    void *conf)
-{
+ngx_http_upstream_bind_set_slot(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{//强制从本地的某个ip地址连接到memcached服务器。这个参数能包括变量。
+//Off参数取消来自前一个配置级别的memcached_bind指令的配置，允许系统自动分配本地地址进行连接。
     char  *p = conf;
 
     ngx_int_t     rc;
     ngx_str_t    *value;
     ngx_addr_t  **paddr;
-
+	//将这个配置设置到ngx_http_upstream_conf_t:local上面，到时候绑定的时候会绑定本机地址的。
     paddr = (ngx_addr_t **) (p + cmd->offset);
-
     *paddr = ngx_palloc(cf->pool, sizeof(ngx_addr_t));
     if (*paddr == NULL) {
         return NGX_CONF_ERROR;
     }
 
     value = cf->args->elts;
-
     rc = ngx_parse_addr(cf->pool, *paddr, value[1].data, value[1].len);
-
     switch (rc) {
     case NGX_OK:
         (*paddr)->name = value[1];
         return NGX_CONF_OK;
 
     case NGX_DECLINED:
-        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                           "invalid address \"%V\"", &value[1]);
+        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,  "invalid address \"%V\"", &value[1]);
     default:
         return NGX_CONF_ERROR;
     }

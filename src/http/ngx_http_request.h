@@ -378,7 +378,7 @@ struct ngx_http_request_s {
     ngx_str_t                         request_line;
     ngx_str_t                         uri;//解析后的URI字符串。原始的在unparsed_uri
     ngx_str_t                         args;
-    ngx_str_t                         exten;
+    ngx_str_t                         exten;//如果请求有后缀，代表后缀名
     ngx_str_t                         unparsed_uri;//解析前的原始字符串URI。
 
     ngx_str_t                         method_name;
@@ -492,7 +492,7 @@ struct ngx_http_request_s {
     unsigned                          header_only:1;
     unsigned                          keepalive:1;//跟r->headers_in.connection_type对应，连接是否关闭等
     unsigned                          lingering_close:1;//详见:http://tengine.taobao.org/book/chapter_2.html
-    unsigned                          discard_body:1;//是否需要丢弃请求内容部分。
+    unsigned                          discard_body:1;//是否已经丢弃过请求的内容部分。
     unsigned                          internal:1;//是否在内部重定向过程中，如果是，则不用从头进行phase处理
     unsigned                          error_page:1;
     unsigned                          ignore_content_encoding:1;

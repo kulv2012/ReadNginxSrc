@@ -310,7 +310,8 @@ struct ngx_http_core_loc_conf_s {
     uint32_t      limit_except;
     void        **limit_except_loc_conf;
 
-    ngx_http_handler_pt  handler;//对于fcgi，为ngx_http_fastcgi_handler
+	//当做内容处理句柄，承担最终的内容处理请求。对于fcgi，为ngx_http_fastcgi_handler,memcached为ngx_http_memcached_handler
+    ngx_http_handler_pt  handler;
 
     /* location name length for inclusive location with inherited alias */
     size_t        alias;
@@ -321,7 +322,7 @@ struct ngx_http_core_loc_conf_s {
     ngx_array_t  *root_values;
 
     ngx_array_t  *types;
-    ngx_hash_t    types_hash;
+    ngx_hash_t    types_hash;//根据ngx_http_core_default_types建立起来的文件后缀跟content_type对应表。用来自动追加content_type进去的。
     ngx_str_t     default_type;
 
     off_t         client_max_body_size;    /* client_max_body_size */

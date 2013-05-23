@@ -1933,7 +1933,7 @@ ngx_http_request_finalizer(ngx_http_request_t *r)
 
 void
 ngx_http_block_reading(ngx_http_request_t *r)
-{
+{//删除连接的读事件注册，不关注读事件了。
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0, "http reading blocked");
     /* aio does not call this handler */
     if ((ngx_event_flags & NGX_USE_LEVEL_EVENT)  && r->connection->read->active)

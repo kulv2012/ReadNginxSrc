@@ -56,7 +56,7 @@ typedef struct {
     ngx_uint_t                  captures_mask;
     ngx_uint_t                  size;
 
-    void                       *main;
+    void                       *main;//正则表达式结构这是顶层的表达式，里面包含了lengths等。
 
     unsigned                    compile_args:1;
     unsigned                    complete_lengths:1;

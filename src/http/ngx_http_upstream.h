@@ -154,7 +154,7 @@ typedef struct {
     ngx_array_t                     *hide_headers;
     ngx_array_t                     *pass_headers;
 
-    ngx_addr_t                      *local;
+    ngx_addr_t                      *local;//ÓÃÀ´°ó¶¨±¾µØIPµÄ£¬±ÈÈçÏŞÖÆÖ»´ÓÖ¸¶¨Íø¿¨·¢ËÍÊı¾İ¸ø¶Ô¶Ë¡£
 
 #if (NGX_HTTP_CACHE)
     ngx_shm_zone_t                  *cache;
@@ -268,14 +268,18 @@ struct ngx_http_upstream_s {//±¾½á¹¹ÌåÓÃÀ´±£´æÒ»¸öÁ¬½ÓµÄupstreamĞÅÏ¢£¬°üÀ¨¸÷ÖÖĞè
 
     ngx_buf_t                        buffer;///¶ÁÈ¡ÉÏÓÎ·µ»ØµÄÊı¾İµÄ»º³åÇø£¬Ò²¾ÍÊÇproxy£¬FCGI·µ»ØµÄÊı¾İ¡£ÕâÀïÃæÓĞhttpÍ·²¿£¬Ò²¿ÉÄÜÓĞbody²¿·Ö¡£
     									//Æäbody²¿·Ö»á¸úevent_pipe_tµÄpreread_bufs½á¹¹¶ÔÓ¦ÆğÀ´¡£¾ÍÊÇÔ¤¶ÁµÄbuf£¬ÆäÊµÊÇi²»Ğ¡ĞÄ¶Áµ½µÄ¡£
-    size_t                           length;//Òª·¢ËÍ¸ø¿Í»§¶ËµÄÊı¾İ´óĞ¡
+    size_t                           length;//Òª·¢ËÍ¸ø¿Í»§¶ËµÄÊı¾İ´óĞ¡£¬»¹ĞèÒª¶ÁÈ¡ÕâÃ´¶à½øÀ´¡£
 
     ngx_chain_t                     *out_bufs;//Õâ¸öÊÇÒª·¢ËÍ¸ø¿Í»§¶ËµÄÊı¾İÁ´½Ó±íå?
     ngx_chain_t                     *busy_bufs;//µ÷ÓÃÁËngx_http_output_filter£¬²¢½«out_bufsµÄÁ´±íÊı¾İÒÆ¶¯µ½ÕâÀï£¬´ı·¢ËÍÍê±Ïºó£¬»áÒÆ¶¯µ½free_bufs
     ngx_chain_t                     *free_bufs;//¿ÕÏĞµÄ»º³åÇø¡£¿ÉÒÔ·ÖÅä
 
     ngx_int_t                      (*input_filter_init)(void *data);//½øĞĞ³õÊ¼»¯£¬Ã»Ê²Ã´ÓÃ£¬memcacheÉèÖÃÎªngx_http_memcached_filter_init
-    ngx_int_t                      (*input_filter)(void *data, ssize_t bytes);//ngx_http_upstream_non_buffered_filter£¬ngx_http_memcached_filterµÈ¡£
+    ngx_int_t                      (*input_filter)(void *data, ssize_t bytes);//ÓÃÀ´¶ÁÈ¡ºó¶ËµÄÊı¾İ£¬·ÇbufferingÄ£Ê½¡£
+    										//ngx_http_upstream_non_buffered_filter£¬ngx_http_memcached_filterµÈ¡£
+    										//Õâ¸öº¯ÊıµÄµ÷ÓÃÊ±»ú: ngx_http_upstream_process_non_buffered_upstreamµÈµ÷ÓÃngx_unix_recv½ÓÊÕµ½upstream·µ»ØµÄÊı¾İºó
+    										//¾Íµ÷ÓÃÕâÀï½øĞĞĞ­Òé×ª»»£¬²»¹ıÄ¿Ç°×ª»»²»¶à¡£
+    
     void                            *input_filter_ctx;//Ö¸ÏòËùÊôµÄÇëÇóµÈÉÏÏÂÎÄ
 
 #if (NGX_HTTP_CACHE)

@@ -1331,7 +1331,7 @@ ngx_utf8_cpystrn(u_char *dst, u_char *src, size_t n, size_t len)
 
 uintptr_t
 ngx_escape_uri(u_char *dst, u_char *src, size_t size, ngx_uint_t type)
-{
+{//如果dst为空，则返回需要转义的字符有多少个。否则将字符串转义了，存放在dst里面。
     ngx_uint_t      n;
     uint32_t       *escape;
     static u_char   hex[] = "0123456789abcdef";
@@ -1445,11 +1445,8 @@ ngx_escape_uri(u_char *dst, u_char *src, size_t size, ngx_uint_t type)
     escape = map[type];
 
     if (dst == NULL) {
-
         /* find the number of the characters to be escaped */
-
         n = 0;
-
         while (size) {
             if (escape[*src >> 5] & (1 << (*src & 0x1f))) {
                 n++;

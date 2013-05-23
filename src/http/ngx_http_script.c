@@ -792,7 +792,8 @@ void ngx_http_script_regex_start_code(ngx_http_script_engine_t *e) {
             e->ip += sizeof(ngx_http_script_regex_code_t);
             return;
         }
-        e->ip += code->next;//next的含义为;如果当前code匹配失败，那么下一个code的位移是在什么地方，这些东西全部放在一个数组里面的。
+        e->ip += code->next;
+		//next的含义为;如果当前code匹配失败，那么下一个code的位移是在什么地方，这些东西全部放在一个数组里面的。
         return;
     }
     if (rc == NGX_ERROR) {

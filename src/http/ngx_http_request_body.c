@@ -362,56 +362,57 @@ ngx_http_write_request_body(ngx_http_request_t *r, ngx_chain_t *body)
 
 ngx_int_t
 ngx_http_discard_request_body(ngx_http_request_t *r)
-{
+{//É¾³ı¿Í»§¶ËÁ¬½Ó¶ÁÊÂ¼ş£¬Èç¹û¿ÉÒÔ£¬¶ÁÈ¡¿Í»§¶ËBODY£¬È»ºó¶ªµô¡£Èç¹û¶ÁÍêÕû¸öBODYÁË£¬lingering_close=0.
     ssize_t       size;
     ngx_event_t  *rev;
 
     if (r != r->main || r->discard_body) {
-        return NGX_OK;
+        return NGX_OK;//Èç¹û²»ÊÇÖ÷ÇëÇó£¬»òÕßÒÑ¾­¶ª¹ıBODYÁË£¬Ö±½Ó·µ»Ø
     }
-
+	//Èç¹ûĞèÒª½øĞĞHTTP 1.1µÄ 100-continueµÄ·´À¡£¬Ôòµ÷ÓÃngx_unix_send·¢ËÍ·´À¡»ØÈ¥
     if (ngx_http_test_expect(r) != NGX_OK) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    rev = r->connection->read;
-
+    rev = r->connection->read;//µÃµ½Á¬½ÓµÄ¶ÁÊÂ¼ş½á¹¹
     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, rev->log, 0, "http set discard body");
-
-    if (rev->timer_set) {
+    if (rev->timer_set) {//ÓÉÓÚ²»ĞèÒª¿Í»§¶Ë·¢ËÍµÄbodyÁË£¬Òò´ËÉ¾³ı¶Á³¬Ê±¶¨Ê±Æ÷£¬²»care¶ÁÈ¡ÊÂ¼şÁË¡£
         ngx_del_timer(rev);
     }
 
     if (r->headers_in.content_length_n <= 0 || r->request_body) {
-        return NGX_OK;
+        return NGX_OK;//Èç¹ûÇëÇóÌå³¤¶ÈÎª0£¬¶ªÆú£¬ºóÃæµÄrequest_bodyÊÇËµÈç¹ûÇëÇóÊı¾İÒÑ¾­¶ÁÈ¡ÁË£¬ÄÇÒ²ËãÁË¡£²»¶ªÆúÁËÂğ å
     }
 
-    size = r->header_in->last - r->header_in->pos;
-
-    if (size) {
+    size = r->header_in->last - r->header_in->pos;//ÕâºóÃæµÄÊı¾İ¿Ï¶¨ÊÇbodyÁË¡£
+    if (size) {//ÒÑ¾­²»Ğ¡ĞÄÔ¤¶ÁÁËÒ»Ğ©Êı¾İ£¬ÄÇÃ´Èç¹ûÔ¤¶ÁµÄÊı¾İ»¹²»ÊÇiÈ«²¿µÄbody£¬ÄÇ¾ÍÒÆ¶¯Ò»ÏÂposÒÔ¼°¼õÉÙÒ»ÏÂcontent_length_n£¬
+    //¾ÍÆ­ËûËµÎÒµÄcontent_length_nÃ»ÄÇÃ´¶à£¬Êµ¼ÊÉÏÊÇÒÑ¾­¶ÁÈ¡ÁË¡£
         if (r->headers_in.content_length_n > size) {
             r->header_in->pos += size;
             r->headers_in.content_length_n -= size;
-
-        } else {
+        } else {//·ñÔòbodyÒÑ¾­¶ÁÍêÁË£¬Ô¤¶ÁµÄÊı¾İ±Ècontent_length_n¶¼´óÁË£¬ÄÇ¿Ï¶¨¶ÁÍêÁË£¬
+        //ÄÇ¾ÍÒÆ¶¯pos,È»ºó½«content_length_nÉèÖÃÎª0£¬Æ­ËûËµÃ»Êı¾İ¶ÁÁË£¬¿Í»§¶ËÃ»·¢ËÍÊı¾İ
             r->header_in->pos += (size_t) r->headers_in.content_length_n;
             r->headers_in.content_length_n = 0;
             return NGX_OK;
         }
     }
-
+	//ÉèÖÃÕâ¸ö¿Í»§¶ËÁ¬½ÓµÄ¶ÁÈ¡ÊÂ¼ş¾ä±úÉèÖÃÎªÈçÏÂ¡£
     r->read_event_handler = ngx_http_discarded_request_body_handler;
-
+	//ÏÂÃæ²ÎÊıÎª0£¬É¶¶¼Ã»¸É
     if (ngx_handle_read_event(rev, 0) != NGX_OK) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
-
+	//Õâ¸öº¯Êı²»¶Ï¶ÁÈ¡¿Í»§¶ËÁ¬½ÓµÄÊı¾İ£¬È»ºó¶ªµô¡£Èç¹û·µ»ØNGX_OK£¬
+	//±íÊ¾Õâ¸öÁ¬½Ó·¢ËÍµÄÊı¾İµ½Í·ÁË£¬±ÈÈç·¢ËÍÁËFIN°ü£¬»òÕßÃ»ÓĞBODYÁË¡£ÄÇ¾ÍÉèÖÃÒ»ÏÂ
     if (ngx_http_read_discarded_request_body(r) == NGX_OK) {
+//±ÜÃâÒ»¸öÎÊÌâ: Èç¹û¿Í»§¶ËÕıÔÚ·¢ËÍÊı¾İ£¬»òÊı¾İ»¹Ã»ÓĞµ½´ï·şÎñ¶Ë£¬·şÎñ¶Ë¾Í½«Á¬½Ó¹ØµôÁË¡£ÄÇÃ´£¬¿Í»§¶Ë·¢ËÍµÄÊı¾İ»áÊÕµ½RST°ü,²»ÓÑºÃ¡£
+//ÓÉÓÚÃ÷ÏÔÖªµÀ¶Ô·½²»»á·¢ËÍÊı¾İÁË£¬ÄÇÃ´Çå³şÕâ¸ö±êÖ¾°É¡£Ö±½Ó¹Ø±Õ¿Í»§¶ËµÄÁ¬½Ó¡£ÕâÑùÔÚngx_http_finalize_connectionÀïÃæ¾Í²»ÓÃÑÓ³Ù¹Ø±ÕÁË¡£
         r->lingering_close = 0;
 
     } else {
         r->count++;
-        r->discard_body = 1;
+        r->discard_body = 1;//±¾´Î»¹Ã»ÓĞ¶ÁÍêÕû¸öbody£¬ÉèÖÃÕâ¸ö±êÖ¾ºó£¬±¾º¯ÊıÏÂ´Î½øÀ´¾Í»áÔÚ¿ªÍ·Ö±½Ó·µ»Ø¡£ÒòÎªÒÑ¾­ÉèÖÃ¹ıÏà¹ØµÄÊı¾İÁË¡£
     }
 
     return NGX_OK;
@@ -420,7 +421,7 @@ ngx_http_discard_request_body(ngx_http_request_t *r)
 
 void
 ngx_http_discarded_request_body_handler(ngx_http_request_t *r)
-{
+{//¸ºÔğ¶ªÆú¿Í»§¶ËµÄÁ³¼ÕÊı¾İ
     ngx_int_t                  rc;
     ngx_msec_t                 timer;
     ngx_event_t               *rev;
@@ -485,16 +486,17 @@ ngx_http_discarded_request_body_handler(ngx_http_request_t *r)
 
 static ngx_int_t
 ngx_http_read_discarded_request_body(ngx_http_request_t *r)
-{
+{//Õâ¸öº¯Êı²»¶Ï¶ÁÈ¡¿Í»§¶ËÁ¬½ÓµÄÊı¾İ£¬È»ºó¶ªµô£¬ÄÇÎÊÌâÀ´ÁË: ÎªÉ¶²»¸É´à²»¶ÁÈ¡ÄØ£¬±ğÀíËü¾ÍĞĞÁË¡£
+//²»ĞĞ£¬Èç¹û²»¶ÁÈ¡£¬ÄÇ¾ÍholdÔÚTCPĞ­ÒéÕ»ÀïÃæ£¬ÄÇ¶ÔÏµÍ³ÄÚ´æÓĞÑ¹Á¦£¬
+//×îÖØÒªµÄÊÇ: ¿Í»§¶Ë½«ÎŞ·¨·¢ËÍÊı¾İ£¬ÒòÎªÎÒÃÇµÄÓµÈû´°¿ÚwindowÎª0ÁË
     size_t   size;
     ssize_t  n;
     u_char   buffer[NGX_HTTP_DISCARD_BUFFER_SIZE];
 
-    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
-                   "http read discarded body");
-
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,  "http read discarded body");
     for ( ;; ) {
         if (r->headers_in.content_length_n == 0) {
+			//ÏÂÃæµÄ¾ä±úÉ¾³ıÁ¬½ÓµÄ¶ÁÊÂ¼ş×¢²á£¬²»¹Ø×¢¶ÁÊÂ¼şÁË¡£
             r->read_event_handler = ngx_http_block_reading;
             return NGX_OK;
         }
@@ -502,26 +504,20 @@ ngx_http_read_discarded_request_body(ngx_http_request_t *r)
         if (!r->connection->read->ready) {
             return NGX_AGAIN;
         }
-
-        size = (r->headers_in.content_length_n > NGX_HTTP_DISCARD_BUFFER_SIZE) ?
-                   NGX_HTTP_DISCARD_BUFFER_SIZE:
-                   (size_t) r->headers_in.content_length_n;
-
+//È¡¸ö×îĞ¡£¬×î´ó4096´óĞ¡µÄ¿éÒ»´Î´ÎµÄ¶ÁÈ¡£¬È»ºóÎŞÇéµÄ¶ªµô
+        size = (r->headers_in.content_length_n > NGX_HTTP_DISCARD_BUFFER_SIZE) ? NGX_HTTP_DISCARD_BUFFER_SIZE:(size_t) r->headers_in.content_length_n;
         n = r->connection->recv(r->connection, buffer, size);
-
         if (n == NGX_ERROR) {
             r->connection->error = 1;
             return NGX_OK;
         }
-
         if (n == NGX_AGAIN) {
             return NGX_AGAIN;
         }
-
         if (n == 0) {
             return NGX_OK;
         }
-
+		//¼õÉÙcontent_length_n´óĞ¡£¬ÕâÑù¾ÍÒÔÎªÃ»ÄÇÃ´¶àbody£¬Êµ¼ÊÉÏÊÇ¶ÁÈ¡µ½ÁË¡£
         r->headers_in.content_length_n -= n;
     }
 }

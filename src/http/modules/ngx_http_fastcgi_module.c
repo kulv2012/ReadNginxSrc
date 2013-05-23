@@ -10,7 +10,7 @@
 
 
 typedef struct {
-    ngx_http_upstream_conf_t       upstream;//这是什么
+    ngx_http_upstream_conf_t       upstream;//upstream配置结构，用来存储配置信息的。u->conf = &flcf->upstream;
 
     ngx_str_t                      index;
 
