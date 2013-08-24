@@ -102,7 +102,7 @@ struct ngx_output_chain_ctx_s {
     ngx_buf_tag_t                tag; //&ngx_http_fastcgi_module;
 
     ngx_output_chain_filter_pt   output_filter;//Ϊngx_chain_writer , ngx_http_output_filter ,ngx_http_next_filter
-    void                        *filter_ctx;
+    void                        *filter_ctx;//Ϊ u->output.filter_ctx = &u->writer;
 };
 
 

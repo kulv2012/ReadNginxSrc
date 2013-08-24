@@ -761,10 +761,10 @@ ngx_module_t  ngx_http_core_module = {
 ngx_str_t  ngx_http_core_get_method = { 3, (u_char *) "GET " };
 
 
-void
-ngx_http_handler(ngx_http_request_t *r)
+void ngx_http_handler(ngx_http_request_t *r)
 {//ngx_http_process_request调用这里，进入处理过程的解析，重定向等。此时HEADER已经读取完毕。
-//
+//	ngx_http_process_request和ngx_http_internal_redirect调用这里。
+
     ngx_http_core_main_conf_t  *cmcf;
     r->connection->log->action = NULL;
     r->connection->unexpected_eof = 0;
@@ -819,7 +819,7 @@ ngx_http_handler(ngx_http_request_t *r)
     r->gzip_ok = 0;
     r->gzip_vary = 0;
 #endif
-    r->write_event_handler = ngx_http_core_run_phases;
+    r->write_event_handler = ngx_http_core_run_phases;//请求的可写事件处理设置为这个，这样就调起了过程处理。
     ngx_http_core_run_phases(r);
 }
 
@@ -1329,8 +1329,7 @@ ngx_http_core_content_phase(ngx_http_request_t *r,   ngx_http_phase_handler_t *p
 }
 
 
-void
-ngx_http_update_location_config(ngx_http_request_t *r)
+void ngx_http_update_location_config(ngx_http_request_t *r)
 {//更新各种配置。根据loc_conf的配置，将对应的所需数据设置到r请求结构体上面去。
 //主要的还有 r->content_handler = clcf->handler;，设置回调。
     ngx_http_core_loc_conf_t  *clcf;

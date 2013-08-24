@@ -19,6 +19,8 @@
 ngx_chain_t *
 ngx_writev_chain(ngx_connection_t *c, ngx_chain_t *in, off_t limit)
 {//调用writev一次发送多个缓冲区，如果没有发送完毕，则返回剩下的链接结构头部。
+//ngx_chain_writer调用这里，调用方式为 ctx->out = c->send_chain(c, ctx->out, ctx->limit);
+//第二个参数为要发送的数据
     u_char        *prev;
     ssize_t        n, size, sent;
     off_t          send, prev_send;
@@ -69,12 +71,11 @@ ngx_writev_chain(ngx_connection_t *c, ngx_chain_t *in, off_t limit)
             }
 #endif
             size = cl->buf->last - cl->buf->pos;//计算这个节点的大小
-            if (send + size > limit) {//超过最大发送大小。截断
+            if (send + size > limit) {//超过最大发送大小。截断，这次只发送这么多
                 size = (ssize_t) (limit - send);
             }
             if (prev == cl->buf->pos) {//如果还是等于刚才的位置，那就复用
                 iov->iov_len += size;
-
             } else {//否则要新增一个节点。返回之
                 iov = ngx_array_push(&vec);
                 if (iov == NULL) {
@@ -110,7 +111,8 @@ ngx_writev_chain(ngx_connection_t *c, ngx_chain_t *in, off_t limit)
         }
         c->sent += sent;//递增统计数据，这个链接上发送的数据大小
 
-        for (cl = in; cl; cl = cl->next) {//又遍历一次这个链接，为了找到那块只成功发送了一部分数据的内存块，从它继续开始发送。
+        for (cl = in; cl; cl = cl->next) {
+			//又遍历一次这个链接，为了找到那块只成功发送了一部分数据的内存块，从它继续开始发送。
             if (ngx_buf_special(cl->buf)) {
                 continue;
             }

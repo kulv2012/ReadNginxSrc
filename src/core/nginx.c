@@ -18,8 +18,7 @@ static char *ngx_core_module_init_conf(ngx_cycle_t *cycle, void *conf);
 static char *ngx_set_user(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 static char *ngx_set_env(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 static char *ngx_set_priority(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
-static char *ngx_set_cpu_affinity(ngx_conf_t *cf, ngx_command_t *cmd,
-    void *conf);
+static char *ngx_set_cpu_affinity(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
 
 static ngx_conf_enum_t  ngx_debug_points[] = {

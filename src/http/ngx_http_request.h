@@ -266,12 +266,18 @@ typedef struct {
 typedef void (*ngx_http_client_body_handler_pt)(ngx_http_request_t *r);
 
 typedef struct {
-    ngx_temp_file_t                  *temp_file;//如果请求的POST数据需要写入文件，则此处记录文件
-    ngx_chain_t                      *bufs;//请求BODY的BUFFER链接表，如果在解析HEADER的时候预读了数据，则会分2块存放在这里
-    ngx_buf_t                        *buf;//指向所POST的，可以写入的缓冲区
-    off_t                             rest;//r->headers_in.content_length_n - preread;计算还有多少数据需要读取，减去刚才预读的部分。
-    ngx_chain_t                      *to_write;//数据将要写入所指向的这个链接表的位置。
-    ngx_http_client_body_handler_pt   post_handler;//POST数据读取完毕后需要调用的HANDLER函数，也就是ngx_http_upstream_init
+	//如果请求的POST数据需要写入文件，则此处记录文件
+    ngx_temp_file_t                  *temp_file;
+    //请求BODY的BUFFER链接表，如果在解析HEADER的时候预读了数据，则会分2块存放在这里
+    ngx_chain_t                      *bufs;
+	//指向所POST的，可以写入的缓冲区
+    ngx_buf_t                        *buf;
+	//r->headers_in.content_length_n - preread;计算还有多少数据需要读取，减去刚才预读的部分。不断减少
+    off_t                             rest;
+	//数据将要写入所指向的这个链接表的位置。
+    ngx_chain_t                      *to_write;
+	//POST数据读取完毕后需要调用的HANDLER函数，也就是ngx_http_upstream_init
+    ngx_http_client_body_handler_pt   post_handler;
 } ngx_http_request_body_t;
 
 
@@ -362,7 +368,7 @@ struct ngx_http_request_s {
                                          /* of ngx_http_upstream_state_t */
 
     ngx_pool_t                       *pool;//一个HTTP请求结构体一个POOL，大小为request_pool_size。其对应的连接也有个POOL
-    ngx_buf_t                        *header_in;//header信息的缓存buffer，通过这个缓存对header进行分析
+    ngx_buf_t                        *header_in;//header信息的缓存buffer，通过这个缓存对header进行分析，ngx_http_read_request_header读取后放入这里
     ngx_http_headers_in_t             headers_in;//请求的header结构体，客户端发送过来的头部数据
     ngx_http_headers_out_t            headers_out;//输出给客户端的头部数据，ngx_http_upstream_process_headers会设置的。
 

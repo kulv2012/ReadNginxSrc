@@ -38,13 +38,16 @@ static ngx_int_t ngx_output_chain_copy_buf(ngx_output_chain_ctx_t *ctx);
 
 
 ngx_int_t
-ngx_output_chain(ngx_output_chain_ctx_t *ctx, ngx_chain_t *in)//ctxÎª&u->output£¬ inÎªu->request_bufs
-{//ÕâÀïnginx filterµÄÖ÷ÒªÂß¼­¶¼ÔÚÕâ¸öº¯ÊıÀïÃæ,½«in²ÎÊıÁ´±íµÄ»º³å¿é¿½±´µ½ctx->in,È»ºó½«ctx->inµÄÊı¾İ¿½±´µ½out,È»ºóµ÷ÓÃoutput_filter·¢ËÍ³öÈ¥¡£
+ngx_output_chain(ngx_output_chain_ctx_t *ctx, ngx_chain_t *in)
+{//ctxÎª&u->output£¬ inÎªu->request_bufs
+//ÕâÀïnginx filterµÄÖ÷ÒªÂß¼­¶¼ÔÚÕâ¸öº¯ÊıÀïÃæ,½«in²ÎÊıÁ´±íµÄ»º³å¿é¿½±´µ½
+//ctx->in,È»ºó½«ctx->inµÄÊı¾İ¿½±´µ½out,È»ºóµ÷ÓÃoutput_filter·¢ËÍ³öÈ¥¡£
     off_t         bsize;
     ngx_int_t     rc, last;
     ngx_chain_t  *cl, *out, **last_out;
 
-    if (ctx->in == NULL && ctx->busy == NULL) {//¿´ÏÂÃæµÄ×¢ÊÍ£¬in,busyÊÇÊ²Ã´?
+    if (ctx->in == NULL && ctx->busy == NULL) {
+		//¿´ÏÂÃæµÄ×¢ÊÍ£¬inÊÇ´ı·¢ËÍµÄÊı¾İ£¬busyÊÇÒÑ¾­µ÷ÓÃngx_chain_writerµ«»¹Ã»ÓĞ·¢ËÍÍê±Ï¡£
         /* the short path for the case when the ctx->in and ctx->busy chains
           * are empty, the incoming chain is empty too or has the single buf that does not require the copy
          */
@@ -82,7 +85,8 @@ ngx_output_chain(ngx_output_chain_ctx_t *ctx, ngx_chain_t *in)//ctxÎª&u->output£
              * and there are the free output bufs to copy in
              */
             bsize = ngx_buf_size(ctx->in->buf);
-            if (bsize == 0 && !ngx_buf_special(ctx->in->buf)) {//Õâ¿éÄÚ´æ´óĞ¡Îª0£¬¿ÉÄÜÓĞÎÊÌâ¡£
+			//Õâ¿éÄÚ´æ´óĞ¡Îª0£¬¿ÉÄÜÓĞÎÊÌâ¡£
+            if (bsize == 0 && !ngx_buf_special(ctx->in->buf)) {
                 ngx_log_error(NGX_LOG_ALERT, ctx->pool->log, 0, "zero size buf in output t:%d r:%d f:%d %p %p-%p %p %O-%O",
                               ctx->in->buf->temporary, ctx->in->buf->recycled, ctx->in->buf->in_file,  ctx->in->buf->start, ctx->in->buf->pos,
                               ctx->in->buf->last,  ctx->in->buf->file,  ctx->in->buf->file_pos,  ctx->in->buf->file_last);
@@ -90,6 +94,7 @@ ngx_output_chain(ngx_output_chain_ctx_t *ctx, ngx_chain_t *in)//ctxÎª&u->output£
                 ctx->in = ctx->in->next;
                 continue;
             }
+			//Õâ¿éÊı¾İ²»ÄÜ¿½±´µÄ»°£¬¾ÍÖ»ÄÜ¸Ä±äÒ»ÏÂÖ¸Ïò½øĞĞ¹²ÏíÁË£¬²»ÄÜ¿½±´Êµ¼ÊÊı¾İÁË¡£
             if (ngx_output_chain_as_is(ctx, ctx->in->buf)) { /* move the chain link to the output chain */
                 cl = ctx->in;//buf²»ĞèÒª¿½±´£¬¸Ä±äÒ»ÏÂÖ¸Ïò¾ÍĞĞÁË¡£
                 ctx->in = cl->next;
@@ -483,15 +488,14 @@ ngx_output_chain_copy_buf(ngx_output_chain_ctx_t *ctx)
 }
 
 
-ngx_int_t
-ngx_chain_writer(void *data, ngx_chain_t *in)
+ngx_int_t ngx_chain_writer(void *data, ngx_chain_t *in)
 {//ngx_output_chainµ÷ÓÃÕâÀï£¬½«Êı¾İ·¢ËÍ³öÈ¥¡£Êı¾İÒÑ¾­¿½±´µ½in²ÎÊıÀïÃæÁË¡£àÇÓÃ·½Ê½;(ctx->filter_ctx, out);£¬outÎªÒª·¢ËÍµÄbufÁ´±íÍ·²¿¡£
     ngx_chain_writer_ctx_t *ctx = data;//ctxÓÀÔ¶Ö¸ÏòÁ´±íÍ·²¿¡£ÆänextÖ¸ÕëÖ¸ÏòÏÂÒ»¸ö½Úµã¡£µ«ÊÇlastÖ¸ÕëÈ´Ö¸Ïò
     off_t              size;
     ngx_chain_t       *cl;
     ngx_connection_t  *c;
     c = ctx->connection;
-	/*ÏÂÃæµÄÑ­»·£¬½«inÀïÃæµÄÃ¿Ò»¸öÁ´½Ó½Úµã£¬Ìí¼Óµ½u->writerËùÖ¸µÄÁ´±íÖĞ¡£²¢¼ÇÂ¼ÕâĞ©inµÄÁ´±íµÄ´óĞ¡¡£*/
+	/*ÏÂÃæµÄÑ­»·£¬½«inÀïÃæµÄÃ¿Ò»¸öÁ´½Ó½Úµã£¬Ìí¼Óµ½ctx->filter_ctxËùÖ¸µÄÁ´±íÖĞ¡£²¢¼ÇÂ¼ÕâĞ©inµÄÁ´±íµÄ´óĞ¡¡£*/
     for (size = 0; in; in = in->next) {//±éÀúÕû¸öÊäÈë»º³åÁ´±í¡£½«ÊäÈë»º³å¹Ò½Óµ½ctxÀïÃæ¡£
         if (ngx_buf_size(in->buf) == 0 && !ngx_buf_special(in->buf)) {
             ngx_debug_point();
@@ -505,12 +509,13 @@ ngx_chain_writer(void *data, ngx_chain_t *in)
 
         cl->buf = in->buf;//Ö¸ÏòÊäÈëµÄ»º³å
         cl->next = NULL;
-        *ctx->last = cl;//¹Òµ½ctxµÄlast´¦£¬Ò²¾ÍÊÇ¹ÒÔØµ½Á´±íµÄ×îºóÃæ¡£³õÊ¼»¯µÄÊ±ºòÊÇu->writer.last = &u->writer.out;£¬Ò²¾ÍÊÇ³õÊ¼Ê±Ö¸Ïò×Ô¼ºµÄÍ·²¿µØÖ·¡£
+        *ctx->last = cl;//¹Òµ½ctxµÄlast´¦£¬Ò²¾ÍÊÇ¹ÒÔØµ½Á´±íµÄ×îºóÃæ¡£
+        //³õÊ¼»¯µÄÊ±ºòÊÇu->writer.last = &u->writer.out;£¬Ò²¾ÍÊÇ³õÊ¼Ê±Ö¸Ïò×Ô¼ºµÄÍ·²¿µØÖ·¡£
         ctx->last = &cl->next;//ÏòºóÒÆ¶¯lastÖ¸Õë£¬Ö¸ÏòĞÂµÄ×îºóÒ»¸ö½ÚµãµÄnext±äÁ¿µØÖ·¡£
     }
     ngx_log_debug1(NGX_LOG_DEBUG_CORE, c->log, 0, "chain writer in: %p", ctx->out);
 
-    for (cl = ctx->out; cl; cl = cl->next) {//±éÀú¸Õ¸Õ×¼±¸µÄÁ´±í£¬²¢Í³¼ÆÆä´óĞ¡£¬ÕâÊÇÉ¶ÒâË¼?ctx->outÎªÁ´±íÍ·
+    for (cl = ctx->out; cl; cl = cl->next) {//±éÀú¸Õ¸Õ×¼±¸µÄÁ´±í£¬²¢Í³¼ÆÆä´óĞ¡£¬ÕâÊÇÉ¶ÒâË¼?ctx->outÎªÁ´±íÍ·£¬ËùÒÔÕâÀï±éÀúµÄÊÇËùÓĞµÄ¡£
         if (ngx_buf_size(cl->buf) == 0 && !ngx_buf_special(cl->buf)) {
             ngx_debug_point();
         }
@@ -519,7 +524,7 @@ ngx_chain_writer(void *data, ngx_chain_t *in)
     if (size == 0 && !c->buffered) {//É¶Êı¾İ¶¼Ã´ÓĞ£¬²»ÓÃ·¢ÁË¶¼
         return NGX_OK;
     }
-	//µ÷ÓÃwritev½«ctx->outµÄÊı¾İÈ«²¿·¢ËÍ³öÈ¥¡£Èç¹ûÃ»·¨ËÍÍê£¬Ôò·µ»ØÃ»·¨ËÍÍê±ÏµÄ²¿·Ö¡£¼ÇÂ¼µ½outÀïÃæ
+	//µ÷ÓÃwritev½«ctx->outµÄÊı¾İÈ«²¿·¢ËÍ³öÈ¥¡£Èç¹ûÃ»·¨ËÍÍê£¬Ôò·µ»ØÃ»·¢ËÍÍê±ÏµÄ²¿·Ö¡£¼ÇÂ¼µ½outÀïÃæ
 	//ÔÚngx_event_connect_peerÁ¬½ÓÉÏÓÎ·şÎñÆ÷µÄÊ±ºòÉèÖÃµÄ·¢ËÍÁ´½Óº¯Êıngx_send_chain=ngx_writev_chain¡£
     ctx->out = c->send_chain(c, ctx->out, ctx->limit);
     ngx_log_debug1(NGX_LOG_DEBUG_CORE, c->log, 0,  "chain writer out: %p", ctx->out);

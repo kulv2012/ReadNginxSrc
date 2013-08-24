@@ -1,11 +1,27 @@
----- content_handler Matches (10 in 4 files) ----
-Ngx_http_core_module.c (h:\dropbox\github\readnginxsrc\src\http):    r->content_handler = NULL;//首先初始化content_handler，这个会在ngx_http_core_content_phase里面使用
-Ngx_http_core_module.c (h:\dropbox\github\readnginxsrc\src\http):	//这个很重要，更新location配置，主要是 r->content_handler = clcf->handler;设置回调从而在content_phrase阶段用这个handler。
-Ngx_http_core_module.c (h:\dropbox\github\readnginxsrc\src\http):    if (r->content_handler) {
-Ngx_http_core_module.c (h:\dropbox\github\readnginxsrc\src\http):        ngx_http_finalize_request(r, r->content_handler(r));
-Ngx_http_core_module.c (h:\dropbox\github\readnginxsrc\src\http)://主要的还有 r->content_handler = clcf->handler;，设置回调。
-Ngx_http_core_module.c (h:\dropbox\github\readnginxsrc\src\http):        r->content_handler = clcf->handler;
-Ngx_http_core_module.c (h:\dropbox\github\readnginxsrc\src\http):            r->content_handler = NULL;
-Ngx_http_proxy_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):	即ngx_http_core_content_phase()的时候，会调用r->content_handler(r)，即ngx_http_proxy_handler。*/
-Ngx_http_request.c (h:\dropbox\github\readnginxsrc\src\http):        r->content_handler = NULL;
-Ngx_http_request.h (h:\dropbox\github\readnginxsrc\src\http):    ngx_http_handler_pt               content_handler;
+---- virtual Matches (29 in 5 files) ----
+Ngx_http.c (h:\dropbox\github\readnginxsrc\src\http):    ngx_http_virtual_names_t  *vn;
+Ngx_http.c (h:\dropbox\github\readnginxsrc\src\http):        vn = ngx_palloc(cf->pool, sizeof(ngx_http_virtual_names_t));
+Ngx_http.c (h:\dropbox\github\readnginxsrc\src\http):        addrs[i].conf.virtual_names = vn;
+Ngx_http.c (h:\dropbox\github\readnginxsrc\src\http):    ngx_http_virtual_names_t  *vn;
+Ngx_http.c (h:\dropbox\github\readnginxsrc\src\http):        vn = ngx_palloc(cf->pool, sizeof(ngx_http_virtual_names_t));
+Ngx_http.c (h:\dropbox\github\readnginxsrc\src\http):        addrs6[i].conf.virtual_names = vn;
+Ngx_http_core_module.h (h:\dropbox\github\readnginxsrc\src\http):    ngx_http_virtual_names_t  *virtual_names;
+Ngx_http_core_module.h (h:\dropbox\github\readnginxsrc\src\http):    ngx_http_core_srv_conf_t  *server;   /* virtual name server conf */
+Ngx_http_request.c (h:\dropbox\github\readnginxsrc\src\http):static ngx_int_t ngx_http_find_virtual_server(ngx_http_request_t *r,
+Ngx_http_request.c (h:\dropbox\github\readnginxsrc\src\http):    r->virtual_names = addr_conf->virtual_names;
+Ngx_http_request.c (h:\dropbox\github\readnginxsrc\src\http):    if (ngx_http_find_virtual_server(r, host, len) != NGX_OK) {
+Ngx_http_request.c (h:\dropbox\github\readnginxsrc\src\http):                if (ngx_http_find_virtual_server(r, r->headers_in.server.data, r->headers_in.server.len) == NGX_ERROR)
+Ngx_http_request.c (h:\dropbox\github\readnginxsrc\src\http):    if (ngx_http_find_virtual_server(r, r->headers_in.server.data, r->headers_in.server.len) == NGX_ERROR) {
+Ngx_http_request.c (h:\dropbox\github\readnginxsrc\src\http):ngx_http_find_virtual_server(ngx_http_request_t *r, u_char *host, size_t len)
+Ngx_http_request.c (h:\dropbox\github\readnginxsrc\src\http):    if (r->virtual_names == NULL) {
+Ngx_http_request.c (h:\dropbox\github\readnginxsrc\src\http):    cscf = ngx_hash_find_combined(&r->virtual_names->names, ngx_hash_key(host, len), host, len);
+Ngx_http_request.c (h:\dropbox\github\readnginxsrc\src\http):    if (cscf) {//上面在r->virtual_names->names的哈希表里面找到虚拟主机名字
+Ngx_http_request.c (h:\dropbox\github\readnginxsrc\src\http):    if (len && r->virtual_names->nregex) {
+Ngx_http_request.c (h:\dropbox\github\readnginxsrc\src\http):        sn = r->virtual_names->regex;
+Ngx_http_request.c (h:\dropbox\github\readnginxsrc\src\http):        for (i = 0; i < r->virtual_names->nregex; i++) {
+Ngx_http_request.h (h:\dropbox\github\readnginxsrc\src\http):} ngx_http_virtual_names_t;
+Ngx_http_request.h (h:\dropbox\github\readnginxsrc\src\http):    ngx_http_virtual_names_t         *virtual_names;//什么东西。r->virtual_names = addr_conf->virtual_names;
+Ngx_http_ssi_filter_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):#define  NGX_HTTP_SSI_INCLUDE_VIRTUAL  0
+Ngx_http_ssi_filter_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):    { ngx_string("virtual"), NGX_HTTP_SSI_INCLUDE_VIRTUAL, 0, 0 },
+Ngx_http_ssi_filter_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):    uri = params[NGX_HTTP_SSI_INCLUDE_VIRTUAL];
+Ngx_http_ssi_filter_module.c (h:\dropbox\github\readnginxsrc\src\http\modules):                      "inlcusion may be either virtual=\"%V\" or file=\"%V\"",

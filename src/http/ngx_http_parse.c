@@ -107,7 +107,8 @@ static uint32_t  usual[] = {
                         [ message-body ]          ; Section 4.3*/
 ngx_int_t
 ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
-{//解析请求的第一行，也就是: GET /index.html HTTP 1.1
+{//解析请求的第一行，也就是: GET /index.html HTTP 1.1，模式为Request-Line   = Method SP Request-URI SP HTTP-Version CRLF
+//请注意，请求行是可能带host等全URL的，比如:  GET http://www.w3.org/pub/WWW/TheProject.html HTTP/1.1
     u_char  c, ch, *p, *m;
     enum {
         sw_start = 0,
@@ -297,6 +298,7 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
         case sw_schema_slash_slash:
             switch (ch) {
             case '/':
+				//请注意，请求行是可能带host等全URL的，比如:  GET http://www.w3.org/pub/WWW/TheProject.html HTTP/1.1
                 r->host_start = p + 1;
                 state = sw_host;
                 break;
@@ -315,7 +317,7 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
             if ((ch >= '0' && ch <= '9') || ch == '.' || ch == '-') {
                 break;
             }
-
+		//请注意，请求行是可能带host等全URL的，比如:  GET http://www.w3.org/pub/WWW/TheProject.html HTTP/1.1
             r->host_end = p;
 
             switch (ch) {

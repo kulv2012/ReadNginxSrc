@@ -208,21 +208,20 @@ void ngx_http_init_connection(ngx_connection_t *c)
     (void) ngx_atomic_fetch_add(ngx_stat_reading, 1);
 #endif
 
-    if (rev->ready) {//如果设置了TCP_DEFER_ACCEPT,那说明accept的时候，实际上数据已经到来.内核此时才通知我们有新连接，其实是还有数据
+    if (rev->ready) {
+//如果设置了TCP_DEFER_ACCEPT,那说明accept的时候，实际上数据已经到来.内核此时才通知我们有新连接，其实是还有数据
         /* the deferred accept(), rtsig, aio, iocp */
         if (ngx_use_accept_mutex) {//如果用了锁，那这里先不读了，挂到后面，退出返回后再读取。
             ngx_post_event(rev, &ngx_posted_events);
 //把这个事件放到后面进行处理，相当于accept的时候，因为有accept锁，我们已经拿到锁了，所以这里先不读了，后续再读
             return;
         }
-
         ngx_http_init_request(rev);//果断去读数据
         return;
     }
-
     ngx_add_timer(rev, c->listening->post_accept_timeout);//等于client_header_timeout，就是客户端发送头部的延迟超时时间
-
-    if (ngx_handle_read_event(rev, 0) != NGX_OK) {//如果没在epoll里面，加入。实际上在ngx_event_accept已经调用了ngx_epoll_add_connection
+    if (ngx_handle_read_event(rev, 0) != NGX_OK) {
+//如果没在epoll里面，加入。实际上在ngx_event_accept已经调用了ngx_epoll_add_connection
 #if (NGX_STAT_STUB)
         (void) ngx_atomic_fetch_add(ngx_stat_reading, -1);
 #endif
@@ -457,7 +456,7 @@ static void ngx_http_init_request(ngx_event_t *rev)
 #endif
 //可以看出ngx_http_init_request之所以在ngx_http_init_connection里面会设置为读事件回调函数，就是想再可读事件到来的时候，再开始初始化相关数据
 //免得一开始接受一个连接就分配数据，太费了。然后初始化后到正常状态，设置为ngx_http_process_request_line
-    rev->handler(rev);//ngx_http_process_request_line
+    rev->handler(rev);//ngx_http_process_request_line,上面刚刚设置的回调。
 }
 
 
@@ -606,8 +605,7 @@ ngx_http_ssl_servername(ngx_ssl_conn_t *ssl_conn, int *ad, void *arg)
 #endif
 
 
-static void
-ngx_http_process_request_line(ngx_event_t *rev)
+static void ngx_http_process_request_line(ngx_event_t *rev)
 {//读取客户端发送的第一行数据，也就是GET /UII HTTP 1.1 , 读取完毕后，会调用ngx_http_process_request_headers读取头部数据
 //ngx_event_t的data记录所属的连接connection_t，连接里面目前指向http_request_t
     u_char                    *host;
@@ -620,9 +618,7 @@ ngx_http_process_request_line(ngx_event_t *rev)
     c = rev->data;//在ngx_http_init_request里面设置的
     r = c->data;
 
-    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, rev->log, 0,
-                   "http process request line");
-
+    ngx_log_debug0(NGX_LOG_DEBUG_HTTP, rev->log, 0, "http process request line");
     if (rev->timedout) {
         ngx_log_error(NGX_LOG_INFO, c->log, NGX_ETIMEDOUT, "client timed out");
         c->timedout = 1;
@@ -631,7 +627,6 @@ ngx_http_process_request_line(ngx_event_t *rev)
     }
 
     rc = NGX_AGAIN;
-
     for ( ;; ) {
         if (rc == NGX_AGAIN) {
             n = ngx_http_read_request_header(r);//读HTTP头部，返回读到的数据的大小。或者失败
@@ -676,7 +671,7 @@ ngx_http_process_request_line(ngx_event_t *rev)
             if (r->http_protocol.data) {
                 r->http_protocol.len = r->request_end - r->http_protocol.data;
             }
-            if (r->uri_ext) {
+            if (r->uri_ext) {//uri里面的最后部分文件后缀名，会用来做默认content-type处理
                 if (r->args_start) {
                     r->exten.len = r->args_start - 1 - r->uri_ext;
                 } else {
@@ -695,6 +690,7 @@ ngx_http_process_request_line(ngx_event_t *rev)
             ngx_log_debug1(NGX_LOG_DEBUG_HTTP, c->log, 0, "http exten: \"%V\"", &r->exten);
 			//HOST处理
             if (r->host_start && r->host_end) {
+			//请注意，请求行是可能带host等全URL的，比如:  GET http://www.w3.org/pub/WWW/TheProject.html HTTP/1.1
                 host = r->host_start;//设置了HOST，验证一下是否合法，结果放入host 临时变量
                 n = ngx_http_validate_host(r, &host,  r->host_end - r->host_start, 0);
                 if (n == 0) {
@@ -710,7 +706,8 @@ ngx_http_process_request_line(ngx_event_t *rev)
                 r->headers_in.server.data = host;//保存一下HOST字符串
             }
             if (r->http_version < NGX_HTTP_VERSION_10) {//HTTP 1.0版本
-     		/*在HTTP1.0中认为每台服务器都绑定一个唯一的IP地址，因此，请求消息中的URL并没有传递主机名（hostname）。
+     		/*http://blog.csdn.net/forgotaboutgirl/article/details/6936982
+     		在HTTP1.0中认为每台服务器都绑定一个唯一的IP地址，因此，请求消息中的URL并没有传递主机名（hostname）。
      		但随着虚拟主机技术的发展，在一台物理服务器上可以存在多个虚拟主机（Multi-homed Web Servers），并且它们共享一个IP地址。
 			HTTP1.1的请求消息和响应消息都应支持Host头域，且请求消息中如果没有Host头域会报告一个错误（400 Bad Request）。
 			此外，服务器应该接受以绝对路径标记的资源请求。*/
@@ -765,8 +762,7 @@ ngx_http_process_request_line(ngx_event_t *rev)
 }
 
 
-static void
-ngx_http_process_request_headers(ngx_event_t *rev)
+static void ngx_http_process_request_headers(ngx_event_t *rev)
 {//ngx_http_process_request_line调用这里，此时已经读取完了请求的第一行GET /uri http 1.0.
 //下面开始循环读取请求的头部headers数据
     u_char                     *p;
@@ -896,8 +892,7 @@ ngx_http_process_request_headers(ngx_event_t *rev)
 }
 
 
-static ssize_t
-ngx_http_read_request_header(ngx_http_request_t *r)
+static ssize_t ngx_http_read_request_header(ngx_http_request_t *r)
 {//看看有没有数据在header_in的缓冲区，如果有，则返回大小，否则读一些，返回大小
 //读取第一行GET、POST的时候会调用这里获取数据，读取header的时候也会调用这里。
     ssize_t                    n;
@@ -935,14 +930,12 @@ ngx_http_read_request_header(ngx_http_request_t *r)
     }
 
     if (n == 0) {//如果recv返回0，表示连接被中断了。
-        ngx_log_error(NGX_LOG_INFO, c->log, 0,
-                      "client closed prematurely connection");
+        ngx_log_error(NGX_LOG_INFO, c->log, 0, "client closed prematurely connection");
     }
 
     if (n == 0 || n == NGX_ERROR) {
         c->error = 1;//有错误发生，关闭连接
         c->log->action = "reading client request headers";
-
         ngx_http_finalize_request(r, NGX_HTTP_BAD_REQUEST);
         return NGX_ERROR;
     }
@@ -1263,7 +1256,8 @@ ngx_http_process_request_header(ngx_http_request_t *r)
 
 static void
 ngx_http_process_request(ngx_http_request_t *r)
-{//
+{//ngx_http_process_request_headers函数调用这里，目前情景我们回顾一下：读取完毕了请求行，headers，并且查找到了虚拟主机，
+//设置好了相关srv/loc_conf。下面就是进行真正请求的处理啦。
     ngx_connection_t  *c;
     c = r->connection;//拿到当前请求的连接结构
     if (r->plain_http) {//是否通过SSL发送明文请求。如果是，关闭连接

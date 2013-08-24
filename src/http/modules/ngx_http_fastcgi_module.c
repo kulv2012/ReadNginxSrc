@@ -542,7 +542,8 @@ static ngx_path_init_t  ngx_http_fastcgi_temp_path = {
 
 static ngx_int_t
 ngx_http_fastcgi_handler(ngx_http_request_t *r)
-{//FCGI处理入口,ngx_http_core_run_phases里面当做一个内容处理模块调用的。ngx_http_core_find_config_phase里面的ngx_http_update_location_config设置
+{//FCGI处理入口,ngx_http_core_run_phases里面当做一个内容处理模块调用的。
+//ngx_http_core_find_config_phase里面的ngx_http_update_location_config设置
     ngx_int_t                     rc;
     ngx_http_upstream_t          *u;
     ngx_http_fastcgi_ctx_t       *f;
@@ -591,11 +592,9 @@ ngx_http_fastcgi_handler(ngx_http_request_t *r)
     u->pipe->input_ctx = r;
 
     rc = ngx_http_read_client_request_body(r, ngx_http_upstream_init);
-
     if (rc >= NGX_HTTP_SPECIAL_RESPONSE) {
         return rc;
     }
-
     return NGX_DONE;
 }
 
@@ -667,6 +666,7 @@ ngx_http_fastcgi_create_key(ngx_http_request_t *r)
 static ngx_int_t
 ngx_http_fastcgi_create_request(ngx_http_request_t *r)
 {//设置FCGI的各种请求开始，请求头部，HTTP BODY数据部分的拷贝，参数拷贝等。后面基本就可以发送数据了
+//存放在u->request_bufs链接表里面。
     off_t                         file_pos;
     u_char                        ch, *pos, *lowcase_key;
     size_t                        size, len, key_len, val_len, padding,

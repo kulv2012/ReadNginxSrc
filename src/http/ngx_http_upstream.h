@@ -108,10 +108,10 @@ struct ngx_http_upstream_srv_conf_s {//一个upstream{}配置结构的数据,这个是umcf->
     ngx_array_t                     *servers;  /* ngx_http_upstream_server_t *///记录本upstream{}块的所有server指令。不是server{}块
 
     ngx_uint_t                       flags;
-    ngx_str_t                        host;
+    ngx_str_t                        host;//表示这条upstream backend{}的backend，把它当做host，其实可以为任何字符串都行的。
     u_char                          *file_name;//配置文件名称
     ngx_uint_t                       line;//配置文件中的行号
-    in_port_t                        port;
+    in_port_t                        port;//上面跟host对应，表示端口。
     in_port_t                        default_port;
 };
 
@@ -258,7 +258,9 @@ struct ngx_http_upstream_s {//本结构体用来保存一个连接的upstream信息，包括各种需
     //也可能是代表要发送给后端的数据链表结构，比如ngx_http_proxy_create_request会这么放的。比如是FCGI结构数据，或者Proxy结构等。
 
     ngx_output_chain_ctx_t           output;//输出数据的结构，里面存有要发送的数据，以及发送的output_filter指针
+    
     ngx_chain_writer_ctx_t           writer;//参考ngx_chain_writer，里面会将输出buf一个个连接到这里。
+    //调用ngx_output_chain后，要发送的数据都会放在这里，然后发送，然后更新这个链表，指向剩下的还没有调用writev发送的。
 
     ngx_http_upstream_conf_t        *conf;//为u->conf = &flcf->upstream;
 
@@ -299,8 +301,8 @@ struct ngx_http_upstream_s {//本结构体用来保存一个连接的upstream信息，包括各种需
 
     ngx_http_upstream_state_t       *state;//当前的状态
 
-    ngx_str_t                        method;
-    ngx_str_t                        schema;
+    ngx_str_t                        method;//GET,HEAD,POST
+    ngx_str_t                        schema;//就是前面的http,https,mecached://等。
     ngx_str_t                        uri;
 
     ngx_http_cleanup_pt             *cleanup;//ngx_http_upstream_cleanup
@@ -312,7 +314,6 @@ struct ngx_http_upstream_s {//本结构体用来保存一个连接的upstream信息，包括各种需
 #if (NGX_HTTP_CACHE)
     unsigned                         cache_status:3;
 #endif
-
     unsigned                         buffering:1;//是否要buffer 后端的数据，如果要用event_pipe的方式发送数据
 
     unsigned                         request_sent:1;//是否已经将request_bufs的数据放入输出链表里面

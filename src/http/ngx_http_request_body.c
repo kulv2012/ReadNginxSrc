@@ -82,7 +82,6 @@ ngx_int_t ngx_http_read_client_request_body(ngx_http_request_t *r, ngx_http_clie
     }
 	//好吧，这回content_length_n大于0 了，也就是个POST请求。这里先记录一下，待会POST数据读取完毕后，需要调用到这个ngx_http_upstream_init
     rb->post_handler = post_handler;
-
     /*
      * set by ngx_pcalloc():
      *     rb->bufs = NULL;
@@ -113,7 +112,7 @@ ngx_int_t ngx_http_read_client_request_body(ngx_http_request_t *r, ngx_http_clie
         rb->bufs->next = NULL;//其余部分待会读取的时候放在这里
         rb->buf = b;//ngx_http_request_body_t 的buf指向这块新的buf
 
-        if ((off_t) preread >= r->headers_in.content_length_n) {//OK，我已经读了足够的BODY了，可以想到，下面可以直接去init了
+        if ((off_t) preread >= r->headers_in.content_length_n) {//OK，我已经读了足够的BODY了，可以想到，下面可以直接去ngx_http_upstream_init了
             /* the whole request body was pre-read */
             r->header_in->pos += (size_t) r->headers_in.content_length_n;
             r->request_length += r->headers_in.content_length_n;//统计请求的总长度
@@ -169,14 +168,12 @@ ngx_int_t ngx_http_read_client_request_body(ngx_http_request_t *r, ngx_http_clie
     if (rb->buf == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
-
     cl = ngx_alloc_chain_link(r->pool);//分配一个链接表
     if (cl == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
     cl->buf = rb->buf;//记录一下刚才申请的内存，待会数据就存放在这了。
     cl->next = NULL;//没有下一个了。
-
     if (b && r->request_body_in_single_buf) {//如果指定只用一个buffer则要加上预读的,那就需要把之前的数据拷贝过来
         size = b->last - b->pos;
         ngx_memcpy(rb->buf->pos, b->pos, size);

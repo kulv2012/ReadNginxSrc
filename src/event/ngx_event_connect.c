@@ -10,8 +10,7 @@
 #include <ngx_event_connect.h>
 
 
-ngx_int_t
-ngx_event_connect_peer(ngx_peer_connection_t *pc)
+ngx_int_t ngx_event_connect_peer(ngx_peer_connection_t *pc)
 {//获取一个可用的peer,然后连接它.并注册可读，可写事件
     int                rc;
     ngx_int_t          event;
@@ -31,7 +30,8 @@ ngx_event_connect_peer(ngx_peer_connection_t *pc)
         ngx_log_error(NGX_LOG_ALERT, pc->log, ngx_socket_errno, ngx_socket_n " failed");
         return NGX_ERROR;
     }
-    c = ngx_get_connection(s, pc->log);//在ngx_cycle->free_connections里面找一个空闲的位置存放这个连接，然后初始化相关成员
+	//在ngx_cycle->free_connections里面找一个空闲的位置存放这个连接，然后初始化相关成员
+    c = ngx_get_connection(s, pc->log);
     if (c == NULL) {//得到一个连接结构。
         if (ngx_close_socket(s) == -1) {
             ngx_log_error(NGX_LOG_ALERT, pc->log, ngx_socket_errno,  ngx_close_socket_n "failed");

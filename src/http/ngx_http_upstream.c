@@ -415,8 +415,7 @@ void ngx_http_upstream_init(ngx_http_request_t *r)
 }
 
 
-static void
-ngx_http_upstream_init_request(ngx_http_request_t *r)
+static void ngx_http_upstream_init_request(ngx_http_request_t *r)
 {//ngx_http_upstream_init调用这里，此时客户端发送的数据都已经接收完毕了。
 /*1. 调用create_request创建fcgi或者proxy的数据结构。
   2. 调用ngx_http_upstream_connect连接下游服务器。
@@ -502,7 +501,8 @@ ngx_http_upstream_init_request(ngx_http_request_t *r)
     cln->handler = ngx_http_upstream_cleanup;//干嘛的
     cln->data = r;//指向所指的请求结构体。
     u->cleanup = &cln->handler;
-/*然后就是这个函数最核心的处理部分，那就是根据upstream的类型来进行不同的操作，这里的upstream就是我们通过XXX_pass传递进来的值，
+/*http://www.pagefault.info/?p=251
+然后就是这个函数最核心的处理部分，那就是根据upstream的类型来进行不同的操作，这里的upstream就是我们通过XXX_pass传递进来的值，
 这里的upstream有可能下面几种情况。
 1 XXX_pass中不包含变量。
 2 XXX_pass传递的值包含了一个变量($开始).这种情况也就是说upstream的url是动态变化的，因此需要每次都解析一遍.
@@ -987,7 +987,6 @@ static void ngx_http_upstream_connect(ngx_http_request_t *r, ngx_http_upstream_t
         ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_NOLIVE);//尝试恢复一些上游模块，然后递归调用ngx_http_upstream_connect进行连接。
         return;
     }
-
     if (rc == NGX_DECLINED) {
         ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_ERROR);//试试其他的。
         return;
@@ -1022,10 +1021,9 @@ static void ngx_http_upstream_connect(ngx_http_request_t *r, ngx_http_upstream_t
             return;
         }
     }
-
     if (r->request_body //客户端发送过来的POST数据存放在此,ngx_http_read_client_request_body放的
 		&& r->request_body->buf && r->request_body->temp_file && r == r->main)
-    {//request_body是FCGI结构的数据。
+    {//request_body是FCGI结构的数据。如果客户端发送了BODY，并且这个BODY存在临时文件里面，那么我们可以立即复用 r->request_body->buf了。
         /*
          * the r->request_body->buf can be reused for one request only,
          * the subrequests should allocate their own temporay bufs
@@ -1209,7 +1207,7 @@ ngx_http_upstream_send_request(ngx_http_request_t *r, ngx_http_upstream_t *u)
     }
     c->log->action = "sending request to upstream";
 	//下面开始过滤模块的过程。对请求的FCGI数据进行过滤，里面会调用ngx_chain_writer，将数据用writev发送出去
-	//ngx_http_upstream_connect将客户端发送的数据拷贝到这里，如果是从读写事件回调进入的，则这里的request_sent应该为1，
+	//ngx_http_proxy_create_request将客户端发送的数据拷贝到这里，如果是从读写事件回调进入的，则这里的request_sent应该为1，
 	//表示数据已经拷贝到输出链了。这份数据是在ngx_http_upstream_init_request里面调用处理模块比如FCGI的create_request处理的，解析为FCGI的结构数据。
     rc = ngx_output_chain(&u->output, u->request_sent ? NULL : u->request_bufs);
     u->request_sent = 1;//标志位数据已经发送完毕,指的是放入输出列表里面，不一定发送出去了。
@@ -1295,6 +1293,7 @@ ngx_http_upstream_send_request_handler(ngx_http_request_t *r, ngx_http_upstream_
 static void ngx_http_upstream_process_header(ngx_http_request_t *r, ngx_http_upstream_t *u)
 {//读取FCGI头部数据，或者proxy头部数据。ngx_http_upstream_send_request发送完数据后，
 //会调用这里，或者有可写事件的时候会调用这里。
+//ngx_http_upstream_connect函数连接fastcgi后，会设置这个回调函数为fcgi连接的可读事件回调。
     ssize_t            n;
     ngx_int_t          rc;
     ngx_connection_t  *c;
@@ -3506,7 +3505,7 @@ ngx_http_upstream(ngx_conf_t *cf, ngx_command_t *cmd, void *dummy)
 
     ngx_memzero(&u, sizeof(ngx_url_t));
     value = cf->args->elts;
-    u.host = value[1];
+    u.host = value[1];//把第一个参数当做host，其实可以是任何字符串表示。
     u.no_resolve = 1;
 	//下面将u代表的数据设置到umcf->upstreams里面去。然后返回对应的upstream{}结构数据指针。
     uscf = ngx_http_upstream_add(cf, &u, NGX_HTTP_UPSTREAM_CREATE
@@ -3596,7 +3595,8 @@ ngx_http_upstream_server(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             return NGX_CONF_ERROR;
         }
     }
-    us = ngx_array_push(uscf->servers);//增加一个server.下面如果配置失败，会直接返回失败的，也就不需要把这项删了。
+    us = ngx_array_push(uscf->servers);
+//增加一个server.下面如果配置失败，会直接返回失败的，也就不需要把这项删了。
     if (us == NULL) {
         return NGX_CONF_ERROR;
     }
@@ -3615,7 +3615,8 @@ ngx_http_upstream_server(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     weight = 1;
     max_fails = 1;
     fail_timeout = 10;
-    for (i = 2; i < cf->args->nelts; i++) {//遍历后面的每一个参数，比如: server 127.0.0.1:8080 max_fails=3 fail_timeout=30s;
+    for (i = 2; i < cf->args->nelts; i++) {
+//遍历后面的每一个参数，比如: server 127.0.0.1:8080 max_fails=3 fail_timeout=30s;
         if (ngx_strncmp(value[i].data, "weight=", 7) == 0) {//得到整数类型的权重。
             if (!(uscf->flags & NGX_HTTP_UPSTREAM_WEIGHT)) {
                 goto invalid;
@@ -3626,7 +3627,8 @@ ngx_http_upstream_server(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             }
             continue;
         }
-        if (ngx_strncmp(value[i].data, "max_fails=", 10) == 0) {//解析max_fails参数，表示
+        if (ngx_strncmp(value[i].data, "max_fails=", 10) == 0) {
+	//解析max_fails参数，表示
             if (!(uscf->flags & NGX_HTTP_UPSTREAM_MAX_FAILS)) {
                 goto invalid;
             }//NUMBER - number of unsuccessful attempts at communicating with the server within the time period
@@ -3636,7 +3638,8 @@ ngx_http_upstream_server(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
             }
             continue;
         }
-        if (ngx_strncmp(value[i].data, "fail_timeout=", 13) == 0) {//这么fail_timeout多的时间内，出现max_fails的失败的服务器将被标记为出问题的。
+        if (ngx_strncmp(value[i].data, "fail_timeout=", 13) == 0) {
+	//这么fail_timeout多的时间内，出现max_fails的失败的服务器将被标记为出问题的。
             if (!(uscf->flags & NGX_HTTP_UPSTREAM_FAIL_TIMEOUT)) {
                 goto invalid;
             }//fail_timeout = TIME - the time during which must occur *max_fails* number of unsuccessful attempts at communication with the server that would cause the server to be considered inoperative
@@ -3690,7 +3693,7 @@ ngx_http_upstream_add(ngx_conf_t *cf, ngx_url_t *u, ngx_uint_t flags)
     ngx_http_upstream_main_conf_t  *umcf;
 
     if (!(flags & NGX_HTTP_UPSTREAM_CREATE)) {//如果没有设置CREATE标志，表示不需要创建。
-        if (ngx_parse_url(cf->pool, u) != NGX_OK) {//简析一下地址格式，unix:域，inet6,4地址，http://host:port/等
+        if (ngx_parse_url(cf->pool, u) != NGX_OK) {//简析一下地址格式，名称，unix:域，inet6,4地址，http://host:port/等
             if (u->err) {
                 ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,  "%s in upstream \"%V\"", u->err, &u->url);
             }
@@ -3733,10 +3736,10 @@ ngx_http_upstream_add(ngx_conf_t *cf, ngx_url_t *u, ngx_uint_t flags)
         return NULL;
     }
     uscf->flags = flags;
-    uscf->host = u->host;
+    uscf->host = u->host;//这里的host其实可以为任何字符串都行的。
     uscf->file_name = cf->conf_file->file.name.data;
     uscf->line = cf->conf_file->line;
-    uscf->port = u->port;
+    uscf->port = u->port;//没有就默认80
     uscf->default_port = u->default_port;
 
     if (u->naddrs == 1) {//比如: server xx.xx.xx.xx:xx weight=2 max_fails=3;  刚开始，ngx_http_upstream会调用本函数。但是其naddres=0.

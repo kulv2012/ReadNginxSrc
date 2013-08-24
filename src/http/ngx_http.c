@@ -1405,7 +1405,8 @@ ngx_http_init_listening(ngx_conf_t *cf, ngx_http_conf_port_t *port)
 
 static ngx_listening_t *
 ngx_http_add_listening(ngx_conf_t *cf, ngx_http_conf_addr_t *addr)
-{//创建一个HTTP的listening结构，其特点为handler为http特订的handler.当接收一个连接后，会调用listen SOCK的handler钩子告诉他做一写相关的初始化
+{//创建一个HTTP的listening结构，其特点为handler为http特订的handler.
+//当接收一个连接后，会调用listen SOCK的handler钩子告诉他做一写相关的初始化
 //端口的打开和绑定在ngx_init_cycle里面进行。这里只做相关的初始化。
     ngx_listening_t           *ls;
     ngx_http_core_loc_conf_t  *clcf;
