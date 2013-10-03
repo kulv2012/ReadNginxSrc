@@ -121,6 +121,7 @@ typedef struct {
 #define ngx_buf_in_memory(b)        (b->temporary || b->memory || b->mmap)
 #define ngx_buf_in_memory_only(b)   (ngx_buf_in_memory(b) && !b->in_file)
 
+//如果这个必须发送给客户端或者是最后一块 && 并且不在内存中且不是文件。那是什么?
 #define ngx_buf_special(b)                                                   \
     ((b->flush || b->last_buf || b->sync)                                    \
      && !ngx_buf_in_memory(b) && !b->in_file)

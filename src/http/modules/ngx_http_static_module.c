@@ -161,7 +161,7 @@ ngx_http_static_handler(ngx_http_request_t *r)
     if (r->method & NGX_HTTP_POST) {//不允许POST请求静态文件
         return NGX_HTTP_NOT_ALLOWED;
     }
-    rc = ngx_http_discard_request_body(r);
+    rc = ngx_http_discard_request_body(r);//丢掉客户端发送的请求body，静态请求不用body
     if (rc != NGX_OK) {
         return rc;
     }
@@ -170,10 +170,10 @@ ngx_http_static_handler(ngx_http_request_t *r)
     r->headers_out.status = NGX_HTTP_OK;
     r->headers_out.content_length_n = of.size;
     r->headers_out.last_modified_time = of.mtime;
-    if (ngx_http_set_content_type(r) != NGX_OK) {
+    if (ngx_http_set_content_type(r) != NGX_OK) {//自动根据后缀名设置content type
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
-    if (r != r->main && of.size == 0) {//发送头部数据
+    if (r != r->main && of.size == 0) {//大小为0，直接发送头部数据
         return ngx_http_send_header(r);
     }
     r->allow_ranges = 1;
@@ -188,7 +188,7 @@ ngx_http_static_handler(ngx_http_request_t *r)
     if (b->file == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
-    rc = ngx_http_send_header(r);
+    rc = ngx_http_send_header(r);//发送头部数据，进入各个filter
 
     if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
         return rc;
@@ -204,7 +204,7 @@ ngx_http_static_handler(ngx_http_request_t *r)
     b->file->log = log;
     b->file->directio = of.is_directio;
 
-    out.buf = b;//将这个数据放入缓冲链接里面
+    out.buf = b;//将这个数据放入缓冲链接里面，发送的时候会判断是否是文件的。
     out.next = NULL;
 //发送数据部分。
     return ngx_http_output_filter(r, &out);
@@ -217,7 +217,7 @@ ngx_http_static_init(ngx_conf_t *cf)
     ngx_http_handler_pt        *h;
     ngx_http_core_main_conf_t  *cmcf;
     cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
-    h = ngx_array_push(&cmcf->phases[NGX_HTTP_CONTENT_PHASE].handlers);
+    h = ngx_array_push(&cmcf->phases[NGX_HTTP_CONTENT_PHASE].handlers);//在CONTET PHASE里面注册ngx_http_static_handler回调。
     if (h == NULL) {
         return NGX_ERROR;
     }
